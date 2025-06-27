@@ -1,13 +1,14 @@
 using Microsoft.Extensions.DependencyInjection;
+using FS.AutoServiceDiscovery.Extensions.Attributes;
 
 namespace FS.AutoServiceDiscovery.Extensions.Configuration;
 
 /// <summary>
-/// Internal helper class that holds service registration information during the discovery process.
-/// This class is used internally by the service discovery mechanism to collect and organize
-/// service registration details before they are registered with the DI container.
+/// Represents service registration information collected during the discovery process.
+/// This class contains all the metadata needed to register a service with the dependency injection container.
+/// Making this public allows external tools and extensions to work with service registration data.
 /// </summary>
-internal class ServiceRegistrationInfo
+public class ServiceRegistrationInfo
 {
     /// <summary>
     /// Gets or sets the service type that will be registered in the DI container.
@@ -33,4 +34,22 @@ internal class ServiceRegistrationInfo
     /// for services that depend on registration order.
     /// </summary>
     public int Order { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the profile for which this service should be registered.
+    /// This corresponds to the Profile property in ServiceRegistrationAttribute.
+    /// </summary>
+    public string? Profile { get; set; }
+    
+    /// <summary>
+    /// Gets or sets whether this service should be ignored in test environments.
+    /// This corresponds to the IgnoreInTests property in ServiceRegistrationAttribute.
+    /// </summary>
+    public bool IgnoreInTests { get; set; }
+    
+    /// <summary>
+    /// Gets or sets the conditional attributes that apply to this service.
+    /// These determine whether the service should be registered based on configuration values.
+    /// </summary>
+    public ConditionalServiceAttribute[] ConditionalAttributes { get; set; } = [];
 }

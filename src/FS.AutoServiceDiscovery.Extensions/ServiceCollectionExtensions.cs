@@ -1,6 +1,7 @@
 using System.Reflection;
 using FS.AutoServiceDiscovery.Extensions.Attributes;
 using FS.AutoServiceDiscovery.Extensions.Configuration;
+using FS.AutoServiceDiscovery.Extensions.Performance;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -54,10 +55,26 @@ public static class ServiceCollectionExtensions
         var options = new AutoServiceOptions();
         configureOptions?.Invoke(options);
 
-        // Eğer assembly verilmezse, calling assembly'yi kullan
-        if (assemblies.Length == 0)
+        // Eğer performance optimizations açıksa, optimized version'ı kullan
+        if (options.EnablePerformanceOptimizations)
         {
-            assemblies = [Assembly.GetCallingAssembly()];
+            return services.AddAutoServicesWithPerformanceOptimizations(configureOptions, assemblies);
+        }
+
+        // Legacy implementation - geriye dönük uyumluluk için
+        return AddAutoServicesLegacy(services, options, assemblies);
+    }
+    
+    /// <summary>
+    /// Legacy implementation of service discovery without performance optimizations.
+    /// Bu method geriye dönük uyumluluk için korunmuştur.
+    /// </summary>
+    private static IServiceCollection AddAutoServicesLegacy(IServiceCollection services, AutoServiceOptions options, Assembly[] assemblies)
+    {
+        // Eğer assembly verilmezse, calling assembly'yi kullan
+        if (!assemblies.Any())
+        {
+            assemblies = new[] { Assembly.GetCallingAssembly() };
         }
 
         var servicesToRegister = new List<ServiceRegistrationInfo>();
@@ -94,7 +111,10 @@ public static class ServiceCollectionExtensions
                         ServiceType = serviceType,
                         ImplementationType = implementationType,
                         Lifetime = attribute.Lifetime,
-                        Order = attribute.Order
+                        Order = attribute.Order,
+                        Profile = attribute.Profile,
+                        IgnoreInTests = attribute.IgnoreInTests,
+                        ConditionalAttributes = implementationType.GetCustomAttributes<ConditionalServiceAttribute>().ToArray()
                     });
                 }
             }
@@ -133,7 +153,7 @@ public static class ServiceCollectionExtensions
         // Profile eşleşiyorsa register et
         return string.Equals(attribute.Profile, profile, StringComparison.OrdinalIgnoreCase);
     }
-    
+
     /// <summary>
     /// Determines whether a service should be registered based on conditional attributes and configuration.
     /// </summary>
@@ -159,7 +179,7 @@ public static class ServiceCollectionExtensions
 
         return true;
     }
-    
+
     /// <summary>
     /// Determines the service type to register for a given implementation type using convention-based discovery.
     /// </summary>
@@ -170,7 +190,9 @@ public static class ServiceCollectionExtensions
     {
         // Eğer attribute'da explicit service type belirtilmişse onu kullan
         if (attribute.ServiceType != null)
+        {
             return attribute.ServiceType;
+        }
 
         // Convention: I{ClassName} interface'ini ara (örn: ProductService -> IProductService)
         var interfaceName = $"I{implementationType.Name}";
@@ -178,7 +200,9 @@ public static class ServiceCollectionExtensions
             .FirstOrDefault(i => i.Name == interfaceName);
 
         if (serviceInterface != null)
+        {
             return serviceInterface;
+        }
 
         // Eğer tek bir interface implement ediyorsa onu kullan
         var interfaces = implementationType.GetInterfaces()
