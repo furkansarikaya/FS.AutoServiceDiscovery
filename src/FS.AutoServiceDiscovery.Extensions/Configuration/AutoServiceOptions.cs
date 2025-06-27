@@ -68,4 +68,11 @@ public class AutoServiceOptions
     /// Default is false (to minimize overhead in production).
     /// </summary>
     public bool EnablePerformanceMetrics { get; set; } = false;
+    
+    /// <summary>
+    /// Gets or sets whether to enable plugin registration.
+    /// When enabled, plugins can be registered and discovered.
+    /// Default is false.
+    /// </summary>
+    public bool EnablePlugins { get; set; } = false;
 }
