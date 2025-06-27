@@ -17,8 +17,8 @@
 
         <!-- Package Metadata -->
         <PackageTags>dependency-injection;di;ioc;service-registration;convention-based;dotnet;net9</PackageTags>
-        <PackageProjectUrl>https://github.com/furkansarikaya/FS.AutoServiceDiscovery.Extensions</PackageProjectUrl>
-        <RepositoryUrl>https://github.com/furkansarikaya/FS.AutoServiceDiscovery.Extensions</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/furkansarikaya/FS.AutoServiceDiscovery</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/furkansarikaya/FS.AutoServiceDiscovery</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README.md</PackageReadmeFile>
