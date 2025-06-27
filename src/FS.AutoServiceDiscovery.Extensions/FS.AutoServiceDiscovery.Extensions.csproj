@@ -25,6 +25,10 @@
         <PackageReleaseNotes>Initial release for .NET 9.0 with convention-based service discovery and automatic registration.</PackageReleaseNotes>
         <LangVersion>latest</LangVersion>
 
+        <!-- Code Quality -->
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <WarningsAsErrors />
+
         <!-- Documentation -->
         <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
     </PropertyGroup>
