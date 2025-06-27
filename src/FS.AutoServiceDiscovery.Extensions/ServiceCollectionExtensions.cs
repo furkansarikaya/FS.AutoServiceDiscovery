@@ -56,13 +56,9 @@ public static class ServiceCollectionExtensions
         configureOptions?.Invoke(options);
 
         // Eğer performance optimizations açıksa, optimized version'ı kullan
-        if (options.EnablePerformanceOptimizations)
-        {
-            return services.AddAutoServicesWithPerformanceOptimizations(configureOptions, assemblies);
-        }
-
-        // Legacy implementation - geriye dönük uyumluluk için
-        return AddAutoServicesLegacy(services, options, assemblies);
+        return options.EnablePerformanceOptimizations ? services.AddAutoServicesWithPerformanceOptimizations(configureOptions, assemblies) :
+            // Legacy implementation - geriye dönük uyumluluk için
+            AddAutoServicesLegacy(services, options, assemblies);
     }
     
     /// <summary>
