@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+        <IsPackable>true</IsPackable>
+
+        <!-- Package Information -->
+        <PackageId>FS.AutoServiceDiscovery.Extensions</PackageId>
+        <Version>9.0.0</Version>
+        <Authors>Furkan SARIKAYA</Authors>
+        <Company>Furkan SARIKAYA</Company>
+        <Description>Convention-based automatic service registration for .NET applications. Discovers and registers Services, Repositories, and other dependencies with minimal configuration. Supports multiple lifetime scopes and custom naming conventions.</Description>
+        <Copyright>Copyright © Furkan Sarıkaya 2025</Copyright>
+
+        <!-- Package Metadata -->
+        <PackageTags>dependency-injection;di;ioc;service-registration;convention-based;dotnet;net9</PackageTags>
+        <PackageProjectUrl>https://github.com/furkansarikaya/FS.AutoServiceDiscovery.Extensions</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/furkansarikaya/FS.AutoServiceDiscovery.Extensions</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageReleaseNotes>Initial release for .NET 9.0 with convention-based service discovery and automatic registration.</PackageReleaseNotes>
+        <LangVersion>latest</LangVersion>
+
+        <!-- Documentation -->
+        <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)'=='Release'">
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);1591</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+</Project>
