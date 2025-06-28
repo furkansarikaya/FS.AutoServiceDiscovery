@@ -49,11 +49,12 @@ flowchart TD
     G --> L
     J --> L
     K --> L
-    
-    style C fill:#e8f5e9
-    style G fill:#e8f5e9
-    style J fill:#e8f5e9
-    style K fill:#ffebee
+
+    style C fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px
+    style G fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px
+    style J fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px
+    style K fill:#ffebee,stroke:#c62828,stroke-width:1px
+
 ```
 
 Let me walk you through each step of this process with concrete examples, so you can see exactly how the system makes these decisions.
