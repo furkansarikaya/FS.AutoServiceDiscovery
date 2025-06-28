@@ -68,9 +68,9 @@ public static class ServiceCollectionExtensions
     private static IServiceCollection AddAutoServicesLegacy(IServiceCollection services, AutoServiceOptions options, Assembly[] assemblies)
     {
         // Eğer assembly verilmezse, calling assembly'yi kullan
-        if (!assemblies.Any())
+        if (assemblies.Length == 0)
         {
-            assemblies = new[] { Assembly.GetCallingAssembly() };
+            assemblies = [Assembly.GetCallingAssembly()];
         }
 
         var servicesToRegister = new List<ServiceRegistrationInfo>();

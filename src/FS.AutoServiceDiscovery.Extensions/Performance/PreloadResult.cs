@@ -240,7 +240,7 @@ public class PreloadResult
         report.AppendLine("Performance Metrics:");
         report.AppendLine($"  Average Preload Time per Assembly: {AveragePreloadTimePerAssemblyMs:F2} ms");
         
-        if (FailedAssemblies.Any())
+        if (FailedAssemblies.Count != 0)
         {
             report.AppendLine();
             report.AppendLine("Failed Assemblies:");

@@ -62,9 +62,9 @@ public static class PluginServiceCollectionExtensions
         configureOptions?.Invoke(options);
 
         // Default to calling assembly if none specified
-        if (!assemblies.Any())
+        if (assemblies.Length == 0)
         {
-            assemblies = new[] { Assembly.GetCallingAssembly() };
+            assemblies = [Assembly.GetCallingAssembly()];
         }
 
         var orderedPlugins = plugins.OrderBy(p => p.Priority).ToList();
@@ -216,7 +216,7 @@ public static class PluginServiceCollectionExtensions
     /// <param name="result">The validation result containing messages to log.</param>
     private static void LogValidationResults(string pluginName, PluginValidationResult result)
     {
-        if (result.Errors.Any())
+        if (result.Errors.Count != 0)
         {
             Console.WriteLine($"  ERRORS in {pluginName}:");
             foreach (var error in result.Errors)
@@ -225,7 +225,7 @@ public static class PluginServiceCollectionExtensions
             }
         }
 
-        if (result.Warnings.Any())
+        if (result.Warnings.Count != 0)
         {
             Console.WriteLine($"  WARNINGS in {pluginName}:");
             foreach (var warning in result.Warnings)
@@ -234,13 +234,11 @@ public static class PluginServiceCollectionExtensions
             }
         }
 
-        if (result.Information.Any())
+        if (result.Information.Count == 0) return;
+        Console.WriteLine($"  INFO from {pluginName}:");
+        foreach (var info in result.Information)
         {
-            Console.WriteLine($"  INFO from {pluginName}:");
-            foreach (var info in result.Information)
-            {
-                Console.WriteLine($"    - {info}");
-            }
+            Console.WriteLine($"    - {info}");
         }
     }
 

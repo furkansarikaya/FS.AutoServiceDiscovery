@@ -91,7 +91,7 @@ public class OptimizedDiscoveryService : IOptimizedDiscoveryService
 
             // Phase 2: Fresh discovery for uncached assemblies
             var uncachedAssemblies = assemblyList.Except(cacheResults.CachedAssemblies).ToList();
-            if (uncachedAssemblies.Any())
+            if (uncachedAssemblies.Count != 0)
             {
                 var freshResults = await ProcessFreshAssembliesAsync(uncachedAssemblies, options);
                 result.ProcessedAssemblies = uncachedAssemblies;

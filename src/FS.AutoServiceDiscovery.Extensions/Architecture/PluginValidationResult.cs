@@ -158,7 +158,7 @@ public class PluginValidationResult
     /// Gets a value indicating whether this validation result has any messages (errors, warnings, or information).
     /// This property helps determine whether there's anything meaningful to report to users.
     /// </summary>
-    public bool HasMessages => Errors.Any() || Warnings.Any() || Information.Any();
+    public bool HasMessages => Errors.Count != 0 || Warnings.Count != 0 || Information.Count != 0;
     
     /// <summary>
     /// Gets the total number of issues (errors + warnings) found during validation.

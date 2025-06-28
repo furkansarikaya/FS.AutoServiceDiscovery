@@ -97,7 +97,7 @@ public class PluginCoordinator : IPluginCoordinator
                 // Filter assemblies that this plugin can process
                 var relevantAssemblies = assemblyList.Where(plugin.CanProcessAssembly).ToList();
                 
-                if (!relevantAssemblies.Any())
+                if (relevantAssemblies.Count == 0)
                 {
                     if (options.EnableLogging)
                     {

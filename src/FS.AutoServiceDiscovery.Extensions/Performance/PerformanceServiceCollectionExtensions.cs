@@ -174,7 +174,7 @@ public static class PerformanceServiceCollectionExtensions
     /// </summary>
     private static bool ShouldRegisterConditional(ServiceRegistrationInfo serviceInfo, IConfiguration? configuration)
     {
-        if (configuration == null || !serviceInfo.ConditionalAttributes.Any())
+        if (configuration == null || serviceInfo.ConditionalAttributes.Length == 0)
             return true;
 
         // Tüm conditional'lar true olmalı (AND logic)

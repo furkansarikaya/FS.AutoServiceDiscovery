@@ -277,7 +277,7 @@ public class PerformanceMetricsSummary
         report.AppendLine($"  Registration Failure Rate: {RegistrationFailureRate:F1}%");
         report.AppendLine();
         
-        if (AssemblyMetrics.Any())
+        if (AssemblyMetrics.Count != 0)
         {
             report.AppendLine("Assembly Scanning Performance:");
             report.AppendLine($"  Assemblies Scanned: {AssemblyMetrics.Count}");
@@ -289,7 +289,7 @@ public class PerformanceMetricsSummary
             report.AppendLine();
         }
         
-        if (PluginMetrics.Any())
+        if (PluginMetrics.Count != 0)
         {
             report.AppendLine("Plugin Performance:");
             report.AppendLine($"  Plugins Executed: {PluginMetrics.Count}");
@@ -300,17 +300,15 @@ public class PerformanceMetricsSummary
             }
             report.AppendLine();
         }
-        
-        if (CacheMetrics.Any())
+
+        if (CacheMetrics.Count == 0) return report.ToString();
+        report.AppendLine("Cache Performance:");
+        report.AppendLine($"  Average Hit Rate: {CacheMetrics.Average(c => c.HitRate):F1}%");
+        if (MostEffectiveCache != null)
         {
-            report.AppendLine("Cache Performance:");
-            report.AppendLine($"  Average Hit Rate: {CacheMetrics.Average(c => c.HitRate):F1}%");
-            if (MostEffectiveCache != null)
-            {
-                report.AppendLine($"  Most Effective Cache: {MostEffectiveCache.OperationType} ({MostEffectiveCache.HitRate:F1}% hit rate)");
-            }
+            report.AppendLine($"  Most Effective Cache: {MostEffectiveCache.OperationType} ({MostEffectiveCache.HitRate:F1}% hit rate)");
         }
-        
+
         return report.ToString();
     }
 }
