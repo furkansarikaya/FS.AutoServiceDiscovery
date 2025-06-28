@@ -180,7 +180,7 @@ public static class PerformanceServiceCollectionExtensions
         // Tüm conditional'lar true olmalı (AND logic)
         foreach (var conditional in serviceInfo.ConditionalAttributes)
         {
-            var configValue = configuration[conditional.ConfigurationKey];
+            var configValue = configuration[conditional.ConfigurationKey ?? string.Empty];
             if (!string.Equals(configValue, conditional.ExpectedValue, StringComparison.OrdinalIgnoreCase))
                 return false;
         }
