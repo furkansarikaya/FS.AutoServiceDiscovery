@@ -1,44 +1,42 @@
 # FS.AutoServiceDiscovery.Extensions
 
-**Dosya Yolu:** `/README.md`
-
 [![NuGet Version](https://img.shields.io/nuget/v/FS.AutoServiceDiscovery.Extensions.svg)](https://www.nuget.org/packages/FS.AutoServiceDiscovery.Extensions)
 [![NuGet Downloads](https://img.shields.io/nuget/dt/FS.AutoServiceDiscovery.Extensions.svg)](https://www.nuget.org/packages/FS.AutoServiceDiscovery.Extensions)
 [![GitHub License](https://img.shields.io/github/license/furkansarikaya/FS.AutoServiceDiscovery)](https://github.com/furkansarikaya/FS.AutoServiceDiscovery/blob/main/LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/furkansarikaya/FS.AutoServiceDiscovery.svg)](https://github.com/furkansarikaya/FS.AutoServiceDiscovery/stargazers)
 
-## 🚀 Hızlı Başlangıç
+A powerful, convention-based automatic service discovery and registration library for .NET 9.0 applications. This library transforms manual dependency injection configuration into an intelligent, attribute-driven system that can discover, validate, and register services automatically while maintaining full control and flexibility.
 
-Bu kütüphane, .NET 9.0 uygulamalarında dependency injection için **convention-based otomatik servis keşfi ve kaydı** sağlar. Geleneksel manuel servis kaydı yerine, attribute'lar kullanarak servislerinizi otomatik olarak keşfetmenizi ve kaydetmenizi sağlar.
+## 🚀 Quick Start
 
-### Basit Kullanım
+Transform your service registration from manual configuration to intelligent automation:
 
 ```csharp
-// 1. Servisinizi işaretleyin
+// 1. Mark your services with attributes
 [ServiceRegistration(ServiceLifetime.Scoped)]
 public class UserService : IUserService
 {
     public async Task<User> GetUserAsync(int id)
     {
-        // Implementation
         return new User { Id = id, Name = "Sample User" };
     }
 }
 
-// 2. Program.cs'de otomatik kaydı etkinleştirin
+// 2. Enable automatic discovery in Program.cs
 var builder = WebApplication.CreateBuilder(args);
 
-// Tek satırda tüm servisleri otomatik kaydet
+// Single line to automatically discover and register all services
 builder.Services.AddAutoServices();
 
 var app = builder.Build();
 ```
 
-**Bu kadar!** Artık `IUserService` dependency injection container'ında kayıtlı ve kullanıma hazır.
+That's it! Your `IUserService` is now automatically discovered, registered, and ready for dependency injection.
 
-## 🎯 Temel Özellikler
+## 🎯 Core Features
 
 ### Convention-Based Discovery
-Servislerinizi attribute'larla işaretleyin, sistem otomatik olarak keşfetsin:
+Automatically discover services using intelligent naming conventions and attributes:
 
 ```csharp
 [ServiceRegistration(ServiceLifetime.Scoped)]
@@ -46,13 +44,10 @@ public class ProductService : IProductService { }
 
 [ServiceRegistration(ServiceLifetime.Singleton)]
 public class CacheService : ICacheService { }
-
-[ServiceRegistration(ServiceLifetime.Transient)]
-public class EmailService : IEmailService { }
 ```
 
-### Environment-Based Registration
-Farklı ortamlar için farklı implementasyonlar:
+### Environment-Aware Registration
+Register different implementations based on environment:
 
 ```csharp
 [ServiceRegistration(ServiceLifetime.Scoped, Profile = "Development")]
@@ -62,186 +57,216 @@ public class MockEmailService : IEmailService { }
 public class SmtpEmailService : IEmailService { }
 ```
 
-### Feature Flag Tabanlı Kayıt
-Konfigürasyona dayalı koşullu servis kaydı:
+### Expression-Based Conditional Registration
+Use powerful, type-safe conditional logic:
 
 ```csharp
-[ConditionalService("FeatureFlags:EnableAdvancedReporting", "true")]
+[ConditionalService(ctx => 
+    ctx.Environment.IsProduction() && 
+    ctx.FeatureEnabled("AdvancedLogging") &&
+    !ctx.Configuration.GetValue<bool>("MaintenanceMode"))]
 [ServiceRegistration(ServiceLifetime.Scoped)]
-public class AdvancedReportingService : IReportingService { }
+public class AdvancedLoggingService : ILoggingService { }
 ```
 
-### Performance Optimizasyonları
-Büyük uygulamalar için yüksek performanslı keşif:
+### Fluent Configuration API
+Build complex configurations with readable, chainable syntax:
 
 ```csharp
-// Caching ve parallel processing ile optimize edilmiş kayıt
+builder.Services.ConfigureAutoServices()
+    .FromCurrentDomain(assembly => !assembly.FullName.StartsWith("System"))
+    .WithProfile(ctx => ctx.Environment.IsDevelopment() ? "Dev" : "Prod")
+    .When(ctx => ctx.FeatureEnabled("AutoDiscovery"))
+    .ExcludeNamespaces("MyApp.Internal.*", "MyApp.Testing.*")
+    .WithPerformanceOptimizations()
+    .Apply();
+```
+
+### High-Performance Discovery
+Optimized for production with advanced caching and parallel processing:
+
+```csharp
 builder.Services.AddAutoServicesWithPerformanceOptimizations(options =>
 {
-    options.Profile = builder.Environment.EnvironmentName;
-    options.Configuration = builder.Configuration;
-    options.EnableLogging = true;
+    options.EnableParallelProcessing = true;
+    options.EnablePerformanceMetrics = true;
+    options.MaxDegreeOfParallelism = 4;
 });
 ```
 
-## 📊 Sistem Mimarisi Genel Bakış
+## 🏗️ Architecture Overview
 
 ```mermaid
 graph TB
-    A[Service Classes with Attributes] --> B[Assembly Scanner]
-    B --> C[Naming Convention Resolver]
-    C --> D[Plugin Coordinator]
-    D --> E[Caching Layer]
-    E --> F[Service Registration]
+    A[Service Classes] --> B[Assembly Scanner]
+    B --> C[Attribute Processor]
+    C --> D[Naming Convention Resolver]
+    D --> E[Conditional Evaluator]
+    E --> F[Plugin Coordinator]
+    F --> G[Performance Cache]
+    G --> H[Service Registration]
     
-    G[Configuration] --> B
-    H[Performance Metrics] --> B
-    I[Custom Plugins] --> D
+    I[Configuration] --> E
+    J[Environment Context] --> E
+    K[Feature Flags] --> E
+    L[Custom Plugins] --> F
     
     style A fill:#e1f5fe
-    style F fill:#c8e6c9
-    style E fill:#fff3e0
+    style H fill:#c8e6c9
+    style G fill:#fff3e0
+    style F fill:#f3e5f5
 ```
 
-## 🔧 Kurulum
+The library follows a sophisticated pipeline architecture where each component has a specific responsibility:
+
+- **Assembly Scanner**: Efficiently discovers service candidates using reflection
+- **Attribute Processor**: Interprets registration attributes and metadata
+- **Naming Convention Resolver**: Applies intelligent interface-to-implementation mapping
+- **Conditional Evaluator**: Processes environment and configuration-based conditions
+- **Plugin Coordinator**: Manages extensible discovery strategies
+- **Performance Cache**: Optimizes repeated discovery operations
+- **Service Registration**: Final registration with dependency injection container
+
+## 📚 Documentation
+
+### Core Concepts
+- **[Getting Started Guide](docs/GettingStarted.md)** - Step-by-step introduction
+- **[Service Registration](docs/ServiceRegistration.md)** - Attribute-based service marking
+- **[Naming Conventions](docs/NamingConventions.md)** - Interface resolution strategies
+- **[Conditional Registration](docs/ConditionalRegistration.md)** - Environment and configuration-based logic
+
+### Advanced Features
+- **[Fluent Configuration](docs/FluentConfiguration.md)** - Advanced configuration patterns
+- **[Plugin Architecture](docs/PluginArchitecture.md)** - Extensible discovery mechanisms
+- **[Performance Optimization](docs/PerformanceOptimization.md)** - Caching and parallel processing
+- **[Expression-Based Conditions](docs/ExpressionBasedConditions.md)** - Type-safe conditional logic
+
+### Architecture & Extensibility
+- **[System Architecture](docs/SystemArchitecture.md)** - Detailed architectural overview
+- **[Custom Naming Conventions](docs/CustomNamingConventions.md)** - Building custom resolution logic
+- **[Plugin Development](docs/PluginDevelopment.md)** - Creating discovery extensions
+- **[Performance Monitoring](docs/PerformanceMonitoring.md)** - Metrics and optimization
+
+## 🛠️ Installation
 
 ```bash
 dotnet add package FS.AutoServiceDiscovery.Extensions
 ```
 
-## 📝 Temel Kullanım Senaryoları
+**Requirements:**
+- .NET 9.0 or later
+- Microsoft.Extensions.DependencyInjection 9.0.0+
 
-### 1. Basit Servis Kaydı
+## 🎨 Usage Patterns
+
+### Basic Service Registration
 ```csharp
 [ServiceRegistration(ServiceLifetime.Scoped)]
 public class UserService : IUserService
 {
-    // Otomatik olarak IUserService -> UserService olarak kayıt edilir
+    // Automatically registered as IUserService -> UserService
 }
 ```
 
-### 2. Explicit Service Type
+### Profile-Based Environment Configuration
 ```csharp
-[ServiceRegistration(ServiceLifetime.Scoped, ServiceType = typeof(ISpecificInterface))]
-public class MultiInterfaceService : ISpecificInterface, IAnotherInterface
-{
-    // Sadece ISpecificInterface olarak kayıt edilir
-}
+[ServiceRegistration(ServiceLifetime.Scoped, Profile = "Development")]
+public class DevUserService : IUserService { }
+
+[ServiceRegistration(ServiceLifetime.Scoped, Profile = "Production")]
+public class ProdUserService : IUserService { }
 ```
 
-### 3. Kayıt Sırası Kontrolü
+### Complex Conditional Logic
 ```csharp
-[ServiceRegistration(ServiceLifetime.Singleton, Order = 1)]
-public class DatabaseService : IDatabaseService { }
-
-[ServiceRegistration(ServiceLifetime.Scoped, Order = 2)]
-public class UserRepository : IUserRepository
-{
-    public UserRepository(IDatabaseService dbService) { }
-}
+[ConditionalService(ctx => 
+    ctx.Environment.IsProduction() && 
+    ctx.Configuration.GetValue<bool>("Features:EnableCaching") &&
+    ctx.EvaluateCustomCondition("DatabaseHealthy"))]
+[ServiceRegistration(ServiceLifetime.Singleton)]
+public class RedisCacheService : ICacheService { }
 ```
 
-### 4. Test Ortamında Hariç Tutma
+### High-Performance Discovery
 ```csharp
-[ServiceRegistration(ServiceLifetime.Singleton, IgnoreInTests = true)]
-public class BackgroundTaskService : IBackgroundTaskService
+// Optimized for large applications
+builder.Services.AddAutoServicesWithPerformanceOptimizations(options =>
 {
-    // Test ortamında kayıt edilmez
-}
-```
-
-## 🚀 İleri Düzey Özellikler
-
-### Plugin Sistemi
-Özel keşif mantığı için extensible plugin mimarisi:
-
-```csharp
-public class CustomDiscoveryPlugin : IServiceDiscoveryPlugin
-{
-    public string Name => "Custom Discovery";
-    public int Priority => 100;
-    
-    public IEnumerable<ServiceRegistrationInfo> DiscoverServices(
-        Assembly assembly, AutoServiceOptions options)
-    {
-        // Özel keşif mantığınız
-    }
-}
-```
-
-### Custom Naming Conventions
-Kendi adlandırma kurallarınızı oluşturun:
-
-```csharp
-public class CustomNamingConvention : INamingConvention
-{
-    public string Name => "Custom Naming";
-    public int Priority => 10;
-    
-    public Type? ResolveServiceType(Type implementationType, 
-        IEnumerable<Type> availableInterfaces)
-    {
-        // Özel adlandırma mantığınız
-    }
-}
-```
-
-### Performance Monitoring
-Detaylı performans metrikleri:
-
-```csharp
-builder.Services.AddAutoServices(options =>
-{
+    options.EnableParallelProcessing = true;
     options.EnablePerformanceMetrics = true;
+    options.EnableLogging = false; // Reduce overhead in production
 });
 
-// Uygulama çalışırken metrics alın
+// Get performance statistics
 var stats = PerformanceServiceCollectionExtensions.GetCacheStatistics();
 Console.WriteLine($"Cache Hit Ratio: {stats.HitRatio:F1}%");
 ```
 
-## 📋 Konfigürasyon Seçenekleri
+## 🔧 Configuration Options
 
+### Basic Configuration
 ```csharp
 builder.Services.AddAutoServices(options =>
 {
-    options.Profile = "Production";                    // Environment-based registration
-    options.Configuration = builder.Configuration;     // Feature flag support
-    options.EnableLogging = true;                     // Detailed logging
-    options.IsTestEnvironment = false;                // Test environment mode
-    options.EnablePerformanceOptimizations = true;   // High-performance mode
-    options.EnableParallelProcessing = true;         // Multi-threaded scanning
-    options.MaxDegreeOfParallelism = 4;              // Thread limit
+    options.Profile = builder.Environment.EnvironmentName;
+    options.Configuration = builder.Configuration;
+    options.EnableLogging = true;
+    options.IsTestEnvironment = false;
 });
 ```
 
-## 📖 Detaylı Dokümantasyon
+### Advanced Performance Configuration
+```csharp
+builder.Services.AddAutoServicesWithPerformanceOptimizations(options =>
+{
+    options.EnableParallelProcessing = true;
+    options.MaxDegreeOfParallelism = Environment.ProcessorCount;
+    options.EnablePerformanceMetrics = true;
+    options.EnableLogging = false;
+});
+```
 
-- **[Architecture Guide](docs/Architecture.md)** - Sistem mimarisi ve tasarım prensipleri
-- **[Performance Guide](docs/Performance.md)** - Performans optimizasyonları ve caching
-- **[Plugin Development](docs/Plugins.md)** - Custom plugin geliştirme rehberi
-- **[Configuration Reference](docs/Configuration.md)** - Tüm konfigürasyon seçenekleri
-- **[Examples & Patterns](docs/Examples.md)** - Gerçek dünya kullanım örnekleri
-- **[Troubleshooting](docs/Troubleshooting.md)** - Yaygın sorunlar ve çözümleri
+### Fluent Configuration
+```csharp
+builder.Services.ConfigureAutoServices()
+    .FromAssemblies(Assembly.GetExecutingAssembly())
+    .WithProfile("Production")
+    .When(ctx => ctx.FeatureEnabled("AutoDiscovery"))
+    .ExcludeTypes(type => type.Name.EndsWith("Test"))
+    .WithDefaultLifetime(ServiceLifetime.Scoped)
+    .WithPerformanceOptimizations()
+    .Apply();
+```
 
-## 🤝 Katkıda Bulunma
+## 📊 Performance Characteristics
 
-Bu proje açık kaynak kodludur ve katkılarınızı memnuniyetle karşılarız:
+| Feature | Impact | Best Use Case |
+|---------|---------|---------------|
+| Basic Discovery | ~10-50ms | Small to medium applications |
+| Cached Discovery | ~1-5ms | Repeated discovery operations |
+| Parallel Processing | 2-4x faster | Large applications (100+ services) |
+| Plugin System | Variable | Complex discovery requirements |
 
-1. Fork yapın
-2. Feature branch oluşturun (`git checkout -b feature/amazing-feature`)
-3. Değişikliklerinizi commit edin (`git commit -m 'Add amazing feature'`)
-4. Branch'inizi push edin (`git push origin feature/amazing-feature`)
-5. Pull Request oluşturun
+## 🤝 Contributing
 
-## 📄 Lisans
+We welcome contributions! This project is open source and benefits from community involvement:
 
-Bu proje MIT lisansı altında yayınlanmıştır. Detaylar için [LICENSE](LICENSE) dosyasına bakın.
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## 🙏 Teşekkürler
+**Development Guidelines:**
+- Follow existing code patterns and conventions
+- Add comprehensive tests for new features
+- Update documentation for any public API changes
+- Ensure backward compatibility when possible
 
-Bu projeyi geliştiren [Furkan SARIKAYA](https://github.com/furkansarikaya) ve katkıda bulunan tüm geliştiricilere teşekkürler.
+## 📄 License
 
----
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-**Made with ❤️ for the .NET community**
+**Made with ❤️ by [Furkan Sarıkaya](https://github.com/furkansarikaya)**
+
+For detailed documentation, advanced usage patterns, and architectural insights, explore the comprehensive guides in our [documentation directory](docs/)
