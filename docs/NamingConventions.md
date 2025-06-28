@@ -36,7 +36,7 @@ flowchart TD
     B -->|Yes| C[Use Explicit Type]
     B -->|No| D[Apply Naming Conventions]
     
-    D --> E[Try Standard I{ClassName} Pattern]
+    D --> E[Try Standard I<ClassName> Pattern]
     E --> F{Found matching interface?}
     F -->|Yes| G[Use Matched Interface]
     F -->|No| H[Try Single Interface Pattern]
@@ -54,7 +54,6 @@ flowchart TD
     style G fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px
     style J fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px
     style K fill:#ffebee,stroke:#c62828,stroke-width:1px
-
 ```
 
 Let me walk you through each step of this process with concrete examples, so you can see exactly how the system makes these decisions.
