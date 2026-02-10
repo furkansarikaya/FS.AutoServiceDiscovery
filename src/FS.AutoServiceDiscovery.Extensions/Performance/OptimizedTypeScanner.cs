@@ -25,9 +25,11 @@ public class OptimizedTypeScanner
     private class TypeMetadata
     {
         public ServiceRegistrationAttribute? RegistrationAttribute { get; set; }
+        public OpenGenericRegistrationAttribute? OpenGenericAttribute { get; set; }
         public ConditionalServiceAttribute[] ConditionalAttributes { get; set; } = [];
         public Type[] Interfaces { get; set; } = [];
         public bool IsServiceCandidate { get; set; }
+        public bool IsOpenGeneric { get; set; }
     }
     
     /// <summary>
@@ -78,7 +80,7 @@ public class OptimizedTypeScanner
             {
                 var metadata = GetOrCreateTypeMetadata(type);
 
-                if (metadata is not { IsServiceCandidate: true, RegistrationAttribute: not null }) 
+                if (!metadata.IsServiceCandidate)
                     continue;
                 var serviceInfo = CreateServiceRegistrationInfo(type, metadata);
                 if (serviceInfo != null)
@@ -100,7 +102,7 @@ public class OptimizedTypeScanner
             foreach (var type in loadableTypes.Where(IsTypeCandidate))
             {
                 var metadata = GetOrCreateTypeMetadata(type);
-                if (metadata is not { IsServiceCandidate: true, RegistrationAttribute: not null }) 
+                if (!metadata.IsServiceCandidate)
                     continue;
                 var serviceInfo = CreateServiceRegistrationInfo(type, metadata);
                 if (serviceInfo != null)
@@ -129,17 +131,21 @@ public class OptimizedTypeScanner
     /// <summary>
     /// Fast preliminary check to determine if a type could be a service candidate.
     /// This method is designed to be as fast as possible to filter out obviously unsuitable types.
+    /// Supports both standard and open generic service registrations.
     /// </summary>
     private static bool IsTypeCandidate(Type type)
     {
         // Quick checks that don't require attribute inspection
         if (!type.IsClass) return false;
         if (type.IsAbstract) return false;
-        if (type.IsGenericTypeDefinition) return false;
-        return type is not { IsNested: true, IsNestedPublic: false } &&
-               // Check for our service registration attribute
-               // Bu daha pahalı bir işlem ama doğru filtreleme için gerekli
-               type.IsDefined(typeof(ServiceRegistrationAttribute), false);
+        if (type is { IsNested: true, IsNestedPublic: false }) return false;
+
+        // Open generic types are only candidates if they have OpenGenericRegistrationAttribute
+        if (type.IsGenericTypeDefinition)
+            return type.IsDefined(typeof(OpenGenericRegistrationAttribute), false);
+
+        // Standard service registration attribute check
+        return type.IsDefined(typeof(ServiceRegistrationAttribute), false);
     }
     
     /// <summary>
@@ -154,53 +160,84 @@ public class OptimizedTypeScanner
     /// <summary>
     /// Creates comprehensive metadata for a type using reflection.
     /// This method performs all the expensive reflection operations once and caches the results.
+    /// Supports both standard and open generic service registrations.
     /// </summary>
     private static TypeMetadata CreateTypeMetadata(Type type)
     {
-        var metadata = new TypeMetadata
+        var metadata = new TypeMetadata();
+
+        // Check for open generic registration
+        if (type.IsGenericTypeDefinition)
+        {
+            metadata.OpenGenericAttribute = type.GetCustomAttribute<OpenGenericRegistrationAttribute>();
+            metadata.IsOpenGeneric = metadata.OpenGenericAttribute != null;
+            metadata.IsServiceCandidate = metadata.IsOpenGeneric;
+        }
+        else
         {
             // Get service registration attribute
-            RegistrationAttribute = type.GetCustomAttribute<ServiceRegistrationAttribute>()
-        };
+            metadata.RegistrationAttribute = type.GetCustomAttribute<ServiceRegistrationAttribute>();
+            metadata.IsServiceCandidate = metadata.RegistrationAttribute != null;
+        }
 
-        metadata.IsServiceCandidate = metadata.RegistrationAttribute != null;
-        
         if (!metadata.IsServiceCandidate)
             return metadata;
-        
-        // Get conditional attributes - bunlar feature flag bazlı registration için kullanılır
+
+        // Get conditional attributes
         metadata.ConditionalAttributes = type.GetCustomAttributes<ConditionalServiceAttribute>().ToArray();
-        
-        // Get interfaces - service type resolution için kullanılır
+
+        // Get interfaces
         metadata.Interfaces = type.GetInterfaces()
-            .Where(i => !i.Name.StartsWith("System.")) // System interface'lerini filtrele
+            .Where(i => !i.Name.StartsWith("System."))
             .ToArray();
-        
+
         return metadata;
     }
     
     /// <summary>
     /// Creates service registration information from type metadata.
-    /// This method implements the service type resolution logic efficiently.
+    /// Supports both standard and open generic registrations, including keyed services and TryAdd.
     /// </summary>
     private static ServiceRegistrationInfo? CreateServiceRegistrationInfo(Type implementationType, TypeMetadata metadata)
     {
+        // Handle open generic registration
+        if (metadata.IsOpenGeneric && metadata.OpenGenericAttribute != null)
+        {
+            var serviceType = DetermineOpenGenericServiceType(implementationType, metadata);
+            if (serviceType == null)
+                return null;
+
+            return new ServiceRegistrationInfo
+            {
+                ServiceType = serviceType,
+                ImplementationType = implementationType,
+                Lifetime = metadata.OpenGenericAttribute.Lifetime,
+                Order = metadata.OpenGenericAttribute.Order,
+                Profile = metadata.OpenGenericAttribute.Profile,
+                UseTryAdd = metadata.OpenGenericAttribute.UseTryAdd,
+                ConditionalAttributes = metadata.ConditionalAttributes
+            };
+        }
+
+        // Handle standard registration
         if (metadata.RegistrationAttribute == null)
             return null;
-        
-        var serviceType = DetermineServiceType(implementationType, metadata);
-        if (serviceType == null)
+
+        var svcType = DetermineServiceType(implementationType, metadata);
+        if (svcType == null)
             return null;
-        
+
         return new ServiceRegistrationInfo
         {
-            ServiceType = serviceType,
+            ServiceType = svcType,
             ImplementationType = implementationType,
             Lifetime = metadata.RegistrationAttribute.Lifetime,
             Order = metadata.RegistrationAttribute.Order,
             Profile = metadata.RegistrationAttribute.Profile,
             IgnoreInTests = metadata.RegistrationAttribute.IgnoreInTests,
-            ConditionalAttributes = metadata.ConditionalAttributes
+            ConditionalAttributes = metadata.ConditionalAttributes,
+            ServiceKey = metadata.RegistrationAttribute.ServiceKey,
+            UseTryAdd = metadata.RegistrationAttribute.UseTryAdd
         };
     }
     
@@ -230,6 +267,44 @@ public class OptimizedTypeScanner
         return implementationType;
     }
     
+    /// <summary>
+    /// Determines the open generic service type from type metadata.
+    /// </summary>
+    private static Type? DetermineOpenGenericServiceType(Type implementationType, TypeMetadata metadata)
+    {
+        var attribute = metadata.OpenGenericAttribute!;
+
+        if (attribute.ServiceType != null)
+            return attribute.ServiceType;
+
+        // Convention: look for an open generic interface matching I{ClassName} pattern
+        var baseName = implementationType.Name;
+        var backtickIndex = baseName.IndexOf('`');
+        if (backtickIndex > 0)
+            baseName = baseName[..backtickIndex];
+
+        var interfaceName = $"I{baseName}";
+
+        var serviceInterface = metadata.Interfaces
+            .FirstOrDefault(i =>
+            {
+                var iName = i.Name;
+                var iBacktick = iName.IndexOf('`');
+                if (iBacktick > 0) iName = iName[..iBacktick];
+                return iName == interfaceName;
+            });
+
+        if (serviceInterface != null)
+            return serviceInterface.IsGenericType ? serviceInterface.GetGenericTypeDefinition() : serviceInterface;
+
+        // Fallback: use first generic interface
+        var genericInterfaces = metadata.Interfaces.Where(i => i.IsGenericType).ToArray();
+        if (genericInterfaces.Length == 1)
+            return genericInterfaces[0].GetGenericTypeDefinition();
+
+        return null;
+    }
+
     /// <summary>
     /// Clears the type metadata cache. Useful for testing scenarios or when assemblies are reloaded.
     /// </summary>

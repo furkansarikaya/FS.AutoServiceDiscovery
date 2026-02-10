@@ -6,6 +6,12 @@ namespace FS.AutoServiceDiscovery.Extensions.Attributes;
 /// This implementation provides the standard environment detection logic that works
 /// with ASP.NET Core hosting environments and custom environment configurations.
 /// </summary>
+/// <remarks>
+/// The environment name is typically sourced from ASPNETCORE_ENVIRONMENT or DOTNET_ENVIRONMENT
+/// environment variables. If no environment is specified, defaults to "Production" for safety.
+/// </remarks>
+/// <seealso cref="IEnvironmentContext"/>
+/// <seealso cref="IConditionalContext"/>
 public class EnvironmentContext : IEnvironmentContext
 {
     /// <summary>

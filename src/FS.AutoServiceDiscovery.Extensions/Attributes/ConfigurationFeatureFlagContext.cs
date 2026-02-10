@@ -10,6 +10,13 @@ namespace FS.AutoServiceDiscovery.Extensions.Attributes;
 /// with dedicated feature flag services like LaunchDarkly, Azure App Configuration,
 /// or other feature management platforms.
 /// </summary>
+/// <remarks>
+/// Feature flags are read from IConfiguration using the "FeatureFlags:{flagName}" key convention.
+/// For example, a flag named "NewDashboard" would be read from "FeatureFlags:NewDashboard" in configuration.
+/// This can be set in appsettings.json, environment variables, or any other IConfiguration source.
+/// </remarks>
+/// <seealso cref="IFeatureFlagContext"/>
+/// <seealso cref="IConditionalContext"/>
 public class ConfigurationFeatureFlagContext : IFeatureFlagContext
 {
     private readonly IConfiguration? _configuration;

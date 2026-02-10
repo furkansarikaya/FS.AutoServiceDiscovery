@@ -9,20 +9,20 @@
 
         <!-- Package Information -->
         <PackageId>FS.AutoServiceDiscovery.Extensions</PackageId>
-        <Version>10.0.0</Version>
+        <Version>10.0.2</Version>
         <Authors>Furkan SARIKAYA</Authors>
         <Company>Furkan SARIKAYA</Company>
         <Description>Convention-based automatic service registration for .NET applications. Discovers and registers Services, Repositories, and other dependencies with minimal configuration. Supports multiple lifetime scopes and custom naming conventions.</Description>
-        <Copyright>Copyright © Furkan Sarıkaya 2025</Copyright>
+        <Copyright>Copyright © Furkan Sarıkaya 2025-2026</Copyright>
 
         <!-- Package Metadata -->
-        <PackageTags>dependency-injection;di;ioc;service-registration;convention-based;dotnet;net9</PackageTags>
+        <PackageTags>dependency-injection;di;ioc;service-registration;convention-based;dotnet;net10;keyed-services;open-generics;decorator-pattern</PackageTags>
         <PackageProjectUrl>https://github.com/furkansarikaya/FS.AutoServiceDiscovery</PackageProjectUrl>
         <RepositoryUrl>https://github.com/furkansarikaya/FS.AutoServiceDiscovery</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README.md</PackageReadmeFile>
-        <PackageReleaseNotes>Initial release for .NET 10.0 with convention-based service discovery and automatic registration.</PackageReleaseNotes>
+        <PackageReleaseNotes>v10.0.2: Added Keyed Services support (.NET 8+), TryAdd pattern for duplicate prevention, Multiple Interface Registration, Open Generics support, Decorator Pattern, and Scope Validation. Enhanced XML documentation across all public APIs.</PackageReleaseNotes>
         <LangVersion>latest</LangVersion>
 
         <!-- Code Quality -->
@@ -39,12 +39,12 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.0" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.2" />
     </ItemGroup>
 
     <ItemGroup>

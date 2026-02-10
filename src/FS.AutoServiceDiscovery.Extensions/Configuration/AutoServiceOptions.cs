@@ -6,6 +6,23 @@ namespace FS.AutoServiceDiscovery.Extensions.Configuration;
 /// <summary>
 /// Configuration options for automatic service discovery and registration with performance optimization settings.
 /// </summary>
+/// <example>
+/// <code>
+/// services.AddAutoServices(options =>
+/// {
+///     options.Profile = "Production";
+///     options.EnableLogging = true;
+///     options.EnablePerformanceOptimizations = true;
+///     options.UseTryAddByDefault = true;
+///     options.EnableScopeValidation = true;
+/// }, Assembly.GetExecutingAssembly());
+/// </code>
+/// </example>
+/// <remarks>
+/// This class centralizes all configuration for the service discovery process including
+/// profile-based filtering, performance tuning, scope validation, and TryAdd defaults.
+/// </remarks>
+/// <seealso cref="ServiceRegistrationInfo"/>
 public class AutoServiceOptions
 {
     /// <summary>
@@ -75,4 +92,40 @@ public class AutoServiceOptions
     /// Default is false.
     /// </summary>
     public bool EnablePlugins { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to use TryAdd pattern globally for all service registrations.
+    /// When true, all services use TryAdd to prevent duplicate registrations.
+    /// Individual services can override this with their attribute settings.
+    /// </summary>
+    /// <remarks>
+    /// When enabled globally, all service registrations will use
+    /// ServiceCollectionDescriptorExtensions.TryAdd
+    /// unless explicitly overridden at the attribute level.
+    /// This is useful for modular applications where assemblies may be scanned multiple times.
+    /// </remarks>
+    public bool UseTryAddByDefault { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to enable scope validation after service registration.
+    /// When enabled, validates that service lifetimes don't create captive dependency issues
+    /// (e.g., a Singleton depending on a Scoped service).
+    /// Default is false.
+    /// </summary>
+    /// <remarks>
+    /// Scope validation analyzes constructor dependencies to detect potential lifetime mismatches.
+    /// It is recommended to enable this during development and testing.
+    /// </remarks>
+    public bool EnableScopeValidation { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets whether to throw an exception when a scope violation is detected.
+    /// When false, violations are logged as warnings but do not prevent application startup.
+    /// Default is false.
+    /// </summary>
+    /// <remarks>
+    /// Setting this to true is recommended for CI/CD pipelines to catch captive dependency
+    /// issues before deployment.
+    /// </remarks>
+    public bool ThrowOnScopeViolation { get; set; } = false;
 }

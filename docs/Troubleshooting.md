@@ -730,7 +730,62 @@ If you've worked through this guide and still have issues:
 
 The auto service discovery system is designed to be transparent and debuggable. With the right diagnostic approach, most issues can be identified and resolved systematically. Remember that the `EnableLogging = true` option is your best friend for understanding what the system is actually doing during discovery.
 
-## 🔗 Related Documentation
+## v10.0.2 Feature Troubleshooting
+
+### Keyed Services Not Resolving
+
+**Problem:** Service with `ServiceKey` is registered but cannot be resolved.
+
+**Solution:** Ensure you use `[FromKeyedServices("key")]` in the constructor parameter:
+
+```csharp
+// Registration
+[ServiceRegistration(ServiceLifetime.Scoped, ServiceKey = "smtp")]
+public class SmtpEmailService : IEmailService { }
+
+// Resolution - must use [FromKeyedServices]
+public class NotificationService([FromKeyedServices("smtp")] IEmailService emailService) { }
+```
+
+### Open Generics Not Being Discovered
+
+**Problem:** `Repository<T>` with `[OpenGenericRegistration]` is not found.
+
+**Solution:** Ensure the class is a true open generic type definition and uses the correct attribute:
+
+```csharp
+// Use OpenGenericRegistration, NOT ServiceRegistration
+[OpenGenericRegistration(ServiceLifetime.Scoped)]
+public class Repository<T> : IRepository<T> where T : class { }
+```
+
+### Decorator Not Wrapping Service
+
+**Problem:** `[DecoratorService]` class is registered but doesn't wrap the original service.
+
+**Solution:** Ensure the original service is registered BEFORE the decorator is discovered, and the decorator accepts the interface via constructor:
+
+```csharp
+[DecoratorService(typeof(IUserService))]
+public class CachingUserService : IUserService
+{
+    private readonly IUserService _inner;
+    public CachingUserService(IUserService inner) => _inner = inner; // Must accept via constructor
+}
+```
+
+### Scope Validation False Positives
+
+**Problem:** Scope validation reports violations for services that work correctly.
+
+**Solution:** If the violation is a known safe pattern, you can disable validation for specific scenarios or use warnings-only mode:
+
+```csharp
+options.EnableScopeValidation = true;
+options.ThrowOnScopeViolation = false; // Log warnings only, don't throw
+```
+
+## Related Documentation
 
 For more advanced scenarios, consult these related guides:
 
@@ -738,5 +793,9 @@ For more advanced scenarios, consult these related guides:
 2. **[Conditional Registration](ConditionalRegistration.md)** - Understand conditional service behavior
 3. **[Naming Conventions](NamingConventions.md)** - Learn about interface resolution
 4. **[Expression-Based Conditions](ExpressionBasedConditions.md)** - Debug complex conditional logic
+5. **[Keyed Services](KeyedServices.md)** - Keyed services usage
+6. **[Open Generics](OpenGenerics.md)** - Open generic registration
+7. **[Decorator Pattern](DecoratorPattern.md)** - Decorator pattern usage
+8. **[Scope Validation](ScopeValidation.md)** - Scope validation details
 
 Remember: most service discovery issues stem from simple configuration or naming problems. Start with the basics, use logging liberally, and work systematically through the diagnostic steps.

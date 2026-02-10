@@ -7,6 +7,20 @@ namespace FS.AutoServiceDiscovery.Extensions.Attributes;
 /// that allows functionality to be turned on or off without code changes. This
 /// interface provides clean access to feature flag systems in conditional expressions.
 /// </summary>
+/// <example>
+/// <code>
+/// // Use in conditional service registration:
+/// [ConditionalService(ctx => ctx.FeatureFlags.IsEnabled("NewPaymentGateway"))]
+/// public class NewPaymentService : IPaymentService { }
+/// </code>
+/// </example>
+/// <remarks>
+/// The default implementation <see cref="ConfigurationFeatureFlagContext"/> reads feature flags
+/// from IConfiguration using the "FeatureFlags:{flagName}" key pattern. Custom implementations
+/// can integrate with dedicated feature flag services like LaunchDarkly or Azure App Configuration.
+/// </remarks>
+/// <seealso cref="ConfigurationFeatureFlagContext"/>
+/// <seealso cref="IConditionalContext"/>
 public interface IFeatureFlagContext
 {
     /// <summary>

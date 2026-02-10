@@ -675,12 +675,63 @@ services.ConfigureAutoServices()
     .Apply();
 ```
 
-## 🔗 Next Steps
+## New in v10.0.2: Additional Fluent Methods
+
+### WithTryAdd()
+
+Enables TryAdd pattern globally for all discovered services:
+
+```csharp
+builder.Services.ConfigureAutoServices()
+    .FromAssemblies(Assembly.GetExecutingAssembly())
+    .WithTryAdd()  // Prevent duplicate registrations
+    .Apply();
+```
+
+### WithScopeValidation()
+
+Enables scope validation to detect captive dependency issues:
+
+```csharp
+builder.Services.ConfigureAutoServices()
+    .FromAssemblies(Assembly.GetExecutingAssembly())
+    .WithScopeValidation(throwOnViolation: true)  // Fail fast on scope issues
+    .Apply();
+```
+
+### WithKeyedServices()
+
+Explicitly enables keyed services support (keyed services work automatically via `ServiceKey` attribute property, but this method provides discoverability):
+
+```csharp
+builder.Services.ConfigureAutoServices()
+    .FromAssemblies(Assembly.GetExecutingAssembly())
+    .WithKeyedServices()
+    .Apply();
+```
+
+### Complete Example with New Methods
+
+```csharp
+builder.Services.ConfigureAutoServices()
+    .FromCurrentDomain(assembly => !assembly.FullName.StartsWith("System"))
+    .WithProfile("Production")
+    .WithTryAdd()
+    .WithScopeValidation(throwOnViolation: true)
+    .WithPerformanceOptimizations()
+    .WithLogging(true)
+    .Apply();
+```
+
+## Next Steps
 
 Fluent configuration provides the foundation for sophisticated service discovery setups. Now that you understand how to build complex configurations readably, explore these related topics:
 
 1. **[Plugin Architecture](PluginArchitecture.md)** - Learn how to extend discovery with custom plugins
 2. **[Performance Optimization](PerformanceOptimization.md)** - Understand how configuration choices affect performance
 3. **[Expression-Based Conditions](ExpressionBasedConditions.md)** - Deep dive into the expression system used in `.When()` methods
+4. **[Keyed Services](KeyedServices.md)** - Multiple implementations with unique keys
+5. **[Scope Validation](ScopeValidation.md)** - Detect captive dependency issues
+6. **[TryAdd Pattern](TryAddPattern.md)** - Prevent duplicate registrations
 
 The fluent configuration API transforms service discovery from a simple utility into a powerful application configuration language. Master these patterns, and you'll have the tools to handle even the most complex service discovery requirements while keeping your configuration readable and maintainable.

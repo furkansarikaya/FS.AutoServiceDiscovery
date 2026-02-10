@@ -12,6 +12,17 @@ namespace FS.AutoServiceDiscovery.Extensions.Caching;
 /// already discovered, much like how a librarian might keep a card catalog of books they've
 /// already categorized to avoid re-cataloging them repeatedly.
 /// </summary>
+/// <example>
+/// <code>
+/// // Custom cache implementation:
+/// services.UseAssemblyScanCache&lt;MyDistributedCache&gt;();
+///
+/// // Or use the default in-memory cache:
+/// services.AddAutoDiscoveryInfrastructure();
+/// </code>
+/// </example>
+/// <seealso cref="MemoryAssemblyScanCache"/>
+/// <seealso cref="CacheStatistics"/>
 public interface IAssemblyScanCache
 {
     /// <summary>

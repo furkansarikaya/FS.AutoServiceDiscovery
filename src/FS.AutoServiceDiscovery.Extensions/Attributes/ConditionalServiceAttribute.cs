@@ -14,6 +14,13 @@ namespace FS.AutoServiceDiscovery.Extensions.Attributes;
 /// into a powerful domain-specific language that can express complex business rules and environmental
 /// conditions in a type-safe, readable manner.
 /// </summary>
+/// <remarks>
+/// Multiple <see cref="ConditionalServiceAttribute"/> instances can be applied to the same class.
+/// When multiple conditions are present, ALL conditions must be satisfied (AND logic) for the
+/// service to be registered.
+/// </remarks>
+/// <seealso cref="IConditionalContext"/>
+/// <seealso cref="ServiceRegistrationAttribute"/>
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = true)]
 public class ConditionalServiceAttribute : Attribute
 {

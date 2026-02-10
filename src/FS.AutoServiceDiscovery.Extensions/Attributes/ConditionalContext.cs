@@ -10,6 +10,14 @@ namespace FS.AutoServiceDiscovery.Extensions.Attributes;
 /// or provide their own implementations that integrate with specific feature flag systems
 /// or environment management tools.
 /// </summary>
+/// <remarks>
+/// This class integrates with the standard .NET configuration system and provides
+/// environment detection based on ASPNETCORE_ENVIRONMENT and DOTNET_ENVIRONMENT variables.
+/// Custom conditions can be registered via <see cref="RegisterCustomCondition"/> for
+/// domain-specific logic.
+/// </remarks>
+/// <seealso cref="IConditionalContext"/>
+/// <seealso cref="ConditionalServiceAttribute"/>
 public class ConditionalContext : IConditionalContext
 {
     private readonly string _environmentName;

@@ -1,8 +1,10 @@
 using System.Reflection;
 using FS.AutoServiceDiscovery.Extensions.Caching;
 using FS.AutoServiceDiscovery.Extensions.Configuration;
+using FS.AutoServiceDiscovery.Extensions.Validation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace FS.AutoServiceDiscovery.Extensions.Performance;
 
@@ -189,7 +191,8 @@ public static class PerformanceServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Optimized service registration that minimizes ServiceDescriptor allocations.
+    /// Optimized service registration with support for keyed services, TryAdd pattern,
+    /// and scope validation.
     /// </summary>
     private static void RegisterServicesOptimized(
         IServiceCollection services,
@@ -210,18 +213,65 @@ public static class PerformanceServiceCollectionExtensions
                 Console.WriteLine($"Registering {servicesInGroup.Count} {lifetimeGroup.Key} services...");
             }
 
-            // Bulk registration for better performance
             foreach (var serviceInfo in servicesInGroup)
             {
-                services.Add(new ServiceDescriptor(
-                    serviceInfo.ServiceType,
-                    serviceInfo.ImplementationType,
-                    serviceInfo.Lifetime));
+                // Determine UseTryAdd: attribute-level or global default
+                var useTryAdd = serviceInfo.UseTryAdd || options.UseTryAddByDefault;
+
+                ServiceDescriptor descriptor;
+
+                if (serviceInfo.ServiceKey != null)
+                {
+                    descriptor = new ServiceDescriptor(
+                        serviceInfo.ServiceType,
+                        serviceInfo.ServiceKey,
+                        serviceInfo.ImplementationType,
+                        serviceInfo.Lifetime);
+                }
+                else
+                {
+                    descriptor = new ServiceDescriptor(
+                        serviceInfo.ServiceType,
+                        serviceInfo.ImplementationType,
+                        serviceInfo.Lifetime);
+                }
+
+                if (useTryAdd)
+                {
+                    services.TryAdd(descriptor);
+                }
+                else
+                {
+                    services.Add(descriptor);
+                }
 
                 if (options.EnableLogging)
                 {
-                    Console.WriteLine($"  {serviceInfo.ServiceType.Name} -> {serviceInfo.ImplementationType.Name} (Order: {serviceInfo.Order})");
+                    var keyInfo = serviceInfo.ServiceKey != null ? $", Key: {serviceInfo.ServiceKey}" : "";
+                    var tryAddInfo = useTryAdd ? ", TryAdd" : "";
+                    Console.WriteLine($"  {serviceInfo.ServiceType.Name} -> {serviceInfo.ImplementationType.Name} (Order: {serviceInfo.Order}{keyInfo}{tryAddInfo})");
                 }
+            }
+        }
+
+        // Scope validation
+        if (options.EnableScopeValidation)
+        {
+            var validationResult = ScopeValidator.ValidateScopes(services);
+
+            if (options.EnableLogging)
+            {
+                foreach (var warning in validationResult.Warnings)
+                    Console.WriteLine($"Scope Warning: {warning.Message}");
+                foreach (var violation in validationResult.Violations)
+                    Console.WriteLine($"Scope Violation: {violation.Message}");
+            }
+
+            if (!validationResult.IsValid && options.ThrowOnScopeViolation)
+            {
+                var messages = string.Join(Environment.NewLine, validationResult.Violations.Select(v => v.Message));
+                throw new InvalidOperationException(
+                    $"Scope validation failed with {validationResult.Violations.Count} violation(s):{Environment.NewLine}{messages}");
             }
         }
     }

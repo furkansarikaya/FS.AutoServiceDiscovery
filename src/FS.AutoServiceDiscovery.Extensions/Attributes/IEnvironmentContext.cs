@@ -7,6 +7,18 @@ namespace FS.AutoServiceDiscovery.Extensions.Attributes;
 /// This interface provides convenient, readable methods for all common environment
 /// checks, making expressions more self-documenting and less error-prone.
 /// </summary>
+/// <example>
+/// <code>
+/// // In conditional expressions:
+/// [ConditionalService(ctx => ctx.Environment.IsDevelopment())]
+/// public class DevOnlyService : IDevService { }
+///
+/// [ConditionalService(ctx => ctx.Environment.IsAnyOf("Development", "Staging"))]
+/// public class NonProdService : INonProdService { }
+/// </code>
+/// </example>
+/// <seealso cref="EnvironmentContext"/>
+/// <seealso cref="IConditionalContext"/>
 public interface IEnvironmentContext
 {
     /// <summary>

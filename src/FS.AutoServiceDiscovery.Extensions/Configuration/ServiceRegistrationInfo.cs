@@ -8,6 +8,12 @@ namespace FS.AutoServiceDiscovery.Extensions.Configuration;
 /// This class contains all the metadata needed to register a service with the dependency injection container.
 /// Making this public allows external tools and extensions to work with service registration data.
 /// </summary>
+/// <remarks>
+/// This class is populated during the assembly scanning phase and consumed during the registration phase.
+/// It supports keyed services via <see cref="ServiceKey"/> and duplicate prevention via <see cref="UseTryAdd"/>.
+/// </remarks>
+/// <seealso cref="Attributes.ServiceRegistrationAttribute"/>
+/// <seealso cref="AutoServiceOptions"/>
 public class ServiceRegistrationInfo
 {
     /// <summary>
@@ -52,4 +58,25 @@ public class ServiceRegistrationInfo
     /// These determine whether the service should be registered based on configuration values.
     /// </summary>
     public ConditionalServiceAttribute[] ConditionalAttributes { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the service key for keyed service registration (.NET 8+).
+    /// When specified, the service is registered as a keyed service.
+    /// </summary>
+    /// <remarks>
+    /// Keyed services allow multiple implementations of the same interface
+    /// to coexist in the DI container, differentiated by a unique key.
+    /// </remarks>
+    public object? ServiceKey { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether to use TryAdd pattern for this service registration.
+    /// When true, the service will only be registered if no existing registration
+    /// for the same service type exists.
+    /// </summary>
+    /// <remarks>
+    /// This prevents duplicate registrations in modular applications
+    /// where multiple modules might register the same service.
+    /// </remarks>
+    public bool UseTryAdd { get; set; }
 }

@@ -641,12 +641,62 @@ public class UserRepository : IUserRepository
 }
 ```
 
-## 🎯 Next Steps
+## New in v10.0.2: Additional Attribute Properties
+
+### ServiceKey (Keyed Services)
+
+Register multiple implementations of the same interface, resolved by a unique key:
+
+```csharp
+[ServiceRegistration(ServiceLifetime.Scoped, ServiceKey = "smtp")]
+public class SmtpEmailService : IEmailService { }
+
+[ServiceRegistration(ServiceLifetime.Scoped, ServiceKey = "sendgrid")]
+public class SendGridEmailService : IEmailService { }
+```
+
+See [Keyed Services](KeyedServices.md) for detailed usage.
+
+### UseTryAdd (Duplicate Prevention)
+
+Prevent duplicate registrations in modular applications:
+
+```csharp
+[ServiceRegistration(ServiceLifetime.Scoped, UseTryAdd = true)]
+public class DefaultUserService : IUserService { }
+```
+
+See [TryAdd Pattern](TryAddPattern.md) for detailed usage.
+
+### ServiceTypes (Multiple Interface Registration)
+
+Register a single implementation under multiple service types:
+
+```csharp
+[ServiceRegistration(ServiceLifetime.Scoped,
+    ServiceTypes = new[] { typeof(IUserService), typeof(IProfileService) })]
+public class UserService : IUserService, IProfileService { }
+```
+
+See [Multiple Interface Registration](MultipleInterfaceRegistration.md) for detailed usage.
+
+### Related New Attributes
+
+| Attribute | Purpose |
+|-----------|---------|
+| `[OpenGenericRegistration]` | Register open generic types like `Repository<T>` ([docs](OpenGenerics.md)) |
+| `[DecoratorService]` | Wrap existing services with decorators ([docs](DecoratorPattern.md)) |
+
+## Next Steps
 
 Now that you understand service registration thoroughly, explore these related topics:
 
 1. **[Conditional Registration](ConditionalRegistration.md)** - Register services based on environment and configuration
-2. **[Naming Conventions](NamingConventions.md)** - Understand and customize interface resolution
-3. **[Performance Optimization](PerformanceOptimization.md)** - Optimize discovery performance for large applications
+2. **[Keyed Services](KeyedServices.md)** - Multiple implementations with unique keys
+3. **[Open Generics](OpenGenerics.md)** - Generic service pattern registration
+4. **[Decorator Pattern](DecoratorPattern.md)** - Service wrapping for cross-cutting concerns
+5. **[Naming Conventions](NamingConventions.md)** - Understand and customize interface resolution
+6. **[Performance Optimization](PerformanceOptimization.md)** - Optimize discovery performance for large applications
+7. **[Scope Validation](ScopeValidation.md)** - Detect captive dependency issues
 
 The service registration system provides the foundation for automatic dependency injection. Master these concepts, and you'll have powerful control over how your application's services are organized and configured.

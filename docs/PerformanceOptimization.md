@@ -818,12 +818,34 @@ var cache = new UnboundedCache(); // Will consume unlimited memory
 var cache = new LRUCache(maxEntries: 100, maxMemoryMB: 50);
 ```
 
-## 🔗 Next Steps
+## v10.0.2 Performance Impact
+
+### Keyed Services
+Keyed service registration adds minimal overhead. The `ServiceDescriptor` constructor that accepts a service key is used instead of the standard constructor. No additional reflection is required.
+
+### TryAdd Pattern
+TryAdd performs a linear scan of the existing `IServiceCollection` to check for duplicates. In applications with hundreds of services, consider using TryAdd selectively rather than globally to avoid O(n^2) behavior during registration.
+
+### Open Generics
+Open generic registration has the same performance characteristics as standard registration. The `OptimizedTypeScanner` handles generic type definitions with an additional attribute check but no extra reflection cost per closed type.
+
+### Scope Validation
+Scope validation runs once after all services are registered. It performs constructor reflection on each implementation type, which adds approximately 1-10ms depending on the number of registered services. This overhead is negligible for production builds but can be disabled if needed:
+
+```csharp
+options.EnableScopeValidation = false; // Disable in performance-critical startup
+```
+
+### Decorator Pattern
+Decorators use factory-based registration which has a small per-resolution overhead compared to type-based registration. This is because each resolution involves creating both the inner service and the decorator. For high-throughput services, consider whether the decorator's benefit outweighs this cost.
+
+## Next Steps
 
 Performance optimization provides the foundation for scalable service discovery in production applications. Now that you understand how to optimize discovery performance, explore these related topics:
 
 1. **[System Architecture](SystemArchitecture.md)** - Understand how optimization integrates with the overall system design
 2. **[Performance Monitoring](PerformanceMonitoring.md)** - Deep dive into monitoring and alerting for discovery performance
 3. **[Plugin Development](PluginDevelopment.md)** - Learn how to create performance-conscious plugins
+4. **[Scope Validation](ScopeValidation.md)** - Understand scope validation overhead and configuration
 
 The performance optimization system transforms service discovery from a potential bottleneck into a fast, efficient process that scales gracefully with application complexity. Master these concepts, and you'll be able to maintain excellent application startup performance even as your codebase grows to enterprise scale.

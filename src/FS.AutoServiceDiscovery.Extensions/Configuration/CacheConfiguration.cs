@@ -12,6 +12,23 @@ namespace FS.AutoServiceDiscovery.Extensions.Configuration;
 /// The configuration options are designed based on common caching patterns and real-world
 /// performance considerations that arise in production applications.
 /// </summary>
+/// <example>
+/// <code>
+/// // Use predefined configurations:
+/// var devConfig = CacheConfiguration.ForDevelopment();
+/// var prodConfig = CacheConfiguration.ForProduction();
+///
+/// // Or customize:
+/// var customConfig = new CacheConfiguration
+/// {
+///     MaxCachedAssemblies = 75,
+///     MaxCacheAge = TimeSpan.FromHours(2),
+///     EnablePreloading = true
+/// };
+/// </code>
+/// </example>
+/// <seealso cref="Caching.IAssemblyScanCache"/>
+/// <seealso cref="Caching.MemoryAssemblyScanCache"/>
 public class CacheConfiguration
 {
     /// <summary>

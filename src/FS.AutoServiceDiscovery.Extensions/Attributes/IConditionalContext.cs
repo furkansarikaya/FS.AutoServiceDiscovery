@@ -16,6 +16,24 @@ namespace FS.AutoServiceDiscovery.Extensions.Attributes;
 /// encapsulating all available information and operations in a well-designed interface,
 /// we enable powerful expressions while keeping them intuitive and maintainable.
 /// </summary>
+/// <example>
+/// <code>
+/// // Usage in conditional expressions:
+/// [ConditionalService(ctx => ctx.Environment.IsProduction() &amp;&amp; ctx.FeatureEnabled("NewAuth"))]
+/// public class AdvancedAuthService : IAuthService { }
+///
+/// // Access configuration:
+/// [ConditionalService(ctx => ctx.GetConfigValue("MaxRetries", 3) > 1)]
+/// public class RetryService : IRetryService { }
+/// </code>
+/// </example>
+/// <remarks>
+/// Implementations must be thread-safe as the context may be used concurrently during
+/// parallel assembly scanning. The default implementation <see cref="ConditionalContext"/>
+/// provides a standard implementation backed by <see cref="Microsoft.Extensions.Configuration.IConfiguration"/>.
+/// </remarks>
+/// <seealso cref="ConditionalContext"/>
+/// <seealso cref="ConditionalServiceAttribute"/>
 public interface IConditionalContext
 {
     /// <summary>

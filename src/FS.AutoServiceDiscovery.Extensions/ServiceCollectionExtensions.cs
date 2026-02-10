@@ -2,8 +2,10 @@ using System.Reflection;
 using FS.AutoServiceDiscovery.Extensions.Attributes;
 using FS.AutoServiceDiscovery.Extensions.Configuration;
 using FS.AutoServiceDiscovery.Extensions.Performance;
+using FS.AutoServiceDiscovery.Extensions.Validation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace FS.AutoServiceDiscovery.Extensions;
 
@@ -94,70 +96,279 @@ public static class ServiceCollectionExtensions
         }
 
         var servicesToRegister = new List<ServiceRegistrationInfo>();
+        var decoratorsToApply = new List<(Type DecoratorType, Type ServiceType, int Order)>();
 
         // Create the enhanced conditional context once for all evaluations
-        // This context provides the rich API that expression-based conditions can use
         var conditionalContext = CreateConditionalContext(options);
 
         foreach (var assembly in assemblies)
         {
-            // Scan for service candidates using the same reliable reflection logic
-            // This part remains unchanged because the basic discovery mechanism is solid
+            // Scan for standard service candidates
             var types = assembly.GetTypes()
-                .Where(t => t.IsClass && !t.IsAbstract && t.GetCustomAttribute<ServiceRegistrationAttribute>() != null);
+                .Where(t => t.IsClass && !t.IsAbstract);
 
             foreach (var implementationType in types)
             {
-                var attribute = implementationType.GetCustomAttribute<ServiceRegistrationAttribute>()!;
+                // Check for decorator attribute
+                var decoratorAttr = implementationType.GetCustomAttribute<DecoratorServiceAttribute>();
+                if (decoratorAttr != null)
+                {
+                    if (!ShouldRegisterForProfile(decoratorAttr.Profile, options.Profile))
+                        continue;
+                    decoratorsToApply.Add((implementationType, decoratorAttr.DecoratedServiceType, decoratorAttr.Order));
+                    continue;
+                }
 
-                // Profile filtering - this logic remains unchanged and continues to work
+                // Check for open generic attribute
+                var openGenericAttr = implementationType.GetCustomAttribute<OpenGenericRegistrationAttribute>();
+                if (openGenericAttr != null && implementationType.IsGenericTypeDefinition)
+                {
+                    if (!ShouldRegisterForProfile(openGenericAttr.Profile, options.Profile))
+                        continue;
+
+                    var serviceType = DetermineOpenGenericServiceType(implementationType, openGenericAttr);
+                    if (serviceType != null)
+                    {
+                        servicesToRegister.Add(new ServiceRegistrationInfo
+                        {
+                            ServiceType = serviceType,
+                            ImplementationType = implementationType,
+                            Lifetime = openGenericAttr.Lifetime,
+                            Order = openGenericAttr.Order,
+                            Profile = openGenericAttr.Profile,
+                            UseTryAdd = openGenericAttr.UseTryAdd
+                        });
+                    }
+                    continue;
+                }
+
+                // Check for standard service registration attribute
+                var attribute = implementationType.GetCustomAttribute<ServiceRegistrationAttribute>();
+                if (attribute == null)
+                    continue;
+
+                // Profile filtering
                 if (!ShouldRegisterForProfile(attribute, options.Profile))
                     continue;
 
-                // Test environment filtering - maintains existing behavior
+                // Test environment filtering
                 if (options.IsTestEnvironment && attribute.IgnoreInTests)
                     continue;
 
-                // Enhanced conditional filtering - this is where the magic happens!
-                // The new method can handle both old string-based and new expression-based conditions
+                // Enhanced conditional filtering
                 if (!ShouldRegisterConditionalEnhanced(implementationType, conditionalContext, options))
                     continue;
 
-                // Service type determination - uses the same reliable convention-based logic
-                var serviceType = DetermineServiceType(implementationType, attribute);
+                // Determine UseTryAdd: attribute-level overrides global default
+                var useTryAdd = attribute.UseTryAdd || options.UseTryAddByDefault;
 
-                if (serviceType != null)
+                // Multiple interface registration
+                if (attribute.ServiceTypes is { Length: > 0 })
                 {
-                    servicesToRegister.Add(new ServiceRegistrationInfo
+                    foreach (var svcType in attribute.ServiceTypes)
                     {
-                        ServiceType = serviceType,
-                        ImplementationType = implementationType,
-                        Lifetime = attribute.Lifetime,
-                        Order = attribute.Order,
-                        Profile = attribute.Profile,
-                        IgnoreInTests = attribute.IgnoreInTests,
-                        ConditionalAttributes = implementationType.GetCustomAttributes<ConditionalServiceAttribute>().ToArray()
-                    });
+                        servicesToRegister.Add(new ServiceRegistrationInfo
+                        {
+                            ServiceType = svcType,
+                            ImplementationType = implementationType,
+                            Lifetime = attribute.Lifetime,
+                            Order = attribute.Order,
+                            Profile = attribute.Profile,
+                            IgnoreInTests = attribute.IgnoreInTests,
+                            ConditionalAttributes = implementationType.GetCustomAttributes<ConditionalServiceAttribute>().ToArray(),
+                            ServiceKey = attribute.ServiceKey,
+                            UseTryAdd = useTryAdd
+                        });
+                    }
+                }
+                else
+                {
+                    // Single service type (standard behavior)
+                    var serviceType = DetermineServiceType(implementationType, attribute);
+                    if (serviceType != null)
+                    {
+                        servicesToRegister.Add(new ServiceRegistrationInfo
+                        {
+                            ServiceType = serviceType,
+                            ImplementationType = implementationType,
+                            Lifetime = attribute.Lifetime,
+                            Order = attribute.Order,
+                            Profile = attribute.Profile,
+                            IgnoreInTests = attribute.IgnoreInTests,
+                            ConditionalAttributes = implementationType.GetCustomAttributes<ConditionalServiceAttribute>().ToArray(),
+                            ServiceKey = attribute.ServiceKey,
+                            UseTryAdd = useTryAdd
+                        });
+                    }
                 }
             }
         }
 
-        // Registration logic remains the same - order by priority and register
+        // Register services ordered by priority
         foreach (var serviceInfo in servicesToRegister.OrderBy(s => s.Order))
         {
-            services.Add(new ServiceDescriptor(
-                serviceInfo.ServiceType,
-                serviceInfo.ImplementationType,
-                serviceInfo.Lifetime));
+            RegisterService(services, serviceInfo, options);
+        }
+
+        // Apply decorators after all services are registered (ordered by Order)
+        foreach (var (decoratorType, serviceType, _) in decoratorsToApply.OrderBy(d => d.Order))
+        {
+            RegisterDecorator(services, serviceType, decoratorType);
 
             if (options.EnableLogging)
             {
-                Console.WriteLine($"Registered: {serviceInfo.ServiceType.Name} -> {serviceInfo.ImplementationType.Name} " +
-                                  $"({serviceInfo.Lifetime}, Order: {serviceInfo.Order})");
+                Console.WriteLine($"Decorated: {serviceType.Name} with {decoratorType.Name}");
+            }
+        }
+
+        // Scope validation
+        if (options.EnableScopeValidation)
+        {
+            var validationResult = ScopeValidator.ValidateScopes(services);
+
+            if (options.EnableLogging)
+            {
+                foreach (var warning in validationResult.Warnings)
+                {
+                    Console.WriteLine($"Scope Warning: {warning.Message}");
+                }
+
+                foreach (var violation in validationResult.Violations)
+                {
+                    Console.WriteLine($"Scope Violation: {violation.Message}");
+                }
+            }
+
+            if (!validationResult.IsValid && options.ThrowOnScopeViolation)
+            {
+                var messages = string.Join(Environment.NewLine, validationResult.Violations.Select(v => v.Message));
+                throw new InvalidOperationException(
+                    $"Scope validation failed with {validationResult.Violations.Count} violation(s):{Environment.NewLine}{messages}");
             }
         }
 
         return services;
+    }
+
+    /// <summary>
+    /// Registers a single service with support for keyed services and TryAdd pattern.
+    /// </summary>
+    private static void RegisterService(IServiceCollection services, ServiceRegistrationInfo serviceInfo, AutoServiceOptions options)
+    {
+        ServiceDescriptor descriptor;
+
+        if (serviceInfo.ServiceKey != null)
+        {
+            descriptor = new ServiceDescriptor(
+                serviceInfo.ServiceType,
+                serviceInfo.ServiceKey,
+                serviceInfo.ImplementationType,
+                serviceInfo.Lifetime);
+        }
+        else
+        {
+            descriptor = new ServiceDescriptor(
+                serviceInfo.ServiceType,
+                serviceInfo.ImplementationType,
+                serviceInfo.Lifetime);
+        }
+
+        if (serviceInfo.UseTryAdd)
+        {
+            services.TryAdd(descriptor);
+        }
+        else
+        {
+            services.Add(descriptor);
+        }
+
+        if (options.EnableLogging)
+        {
+            var keyInfo = serviceInfo.ServiceKey != null ? $", Key: {serviceInfo.ServiceKey}" : "";
+            var tryAddInfo = serviceInfo.UseTryAdd ? ", TryAdd" : "";
+            Console.WriteLine($"Registered: {serviceInfo.ServiceType.Name} -> {serviceInfo.ImplementationType.Name} " +
+                              $"({serviceInfo.Lifetime}, Order: {serviceInfo.Order}{keyInfo}{tryAddInfo})");
+        }
+    }
+
+    /// <summary>
+    /// Registers a decorator that wraps an existing service registration.
+    /// The decorator must implement the same interface and accept it via constructor injection.
+    /// </summary>
+    private static void RegisterDecorator(IServiceCollection services, Type serviceType, Type decoratorType)
+    {
+        var existingDescriptor = services.LastOrDefault(d => d.ServiceType == serviceType);
+        if (existingDescriptor == null) return;
+
+        services.Remove(existingDescriptor);
+
+        services.Add(new ServiceDescriptor(
+            serviceType,
+            provider =>
+            {
+                var innerInstance = CreateInstance(provider, existingDescriptor);
+                return ActivatorUtilities.CreateInstance(provider, decoratorType, innerInstance);
+            },
+            existingDescriptor.Lifetime));
+    }
+
+    /// <summary>
+    /// Creates a service instance from an existing descriptor (used for decorator chaining).
+    /// </summary>
+    private static object CreateInstance(IServiceProvider provider, ServiceDescriptor descriptor)
+    {
+        if (descriptor.ImplementationInstance != null)
+            return descriptor.ImplementationInstance;
+
+        if (descriptor.ImplementationFactory != null)
+            return descriptor.ImplementationFactory(provider);
+
+        if (descriptor.ImplementationType != null)
+            return ActivatorUtilities.CreateInstance(provider, descriptor.ImplementationType);
+
+        throw new InvalidOperationException($"Cannot create instance for service type '{descriptor.ServiceType.Name}'.");
+    }
+
+    /// <summary>
+    /// Determines the open generic service type for an open generic implementation.
+    /// </summary>
+    private static Type? DetermineOpenGenericServiceType(Type implementationType, OpenGenericRegistrationAttribute attribute)
+    {
+        if (attribute.ServiceType != null)
+            return attribute.ServiceType;
+
+        // Convention: look for an open generic interface matching I{ClassName} pattern
+        // For Repository`1, look for IRepository`1
+        var baseName = implementationType.Name;
+        var backtickIndex = baseName.IndexOf('`');
+        if (backtickIndex > 0)
+            baseName = baseName[..backtickIndex];
+
+        var interfaceName = $"I{baseName}";
+
+        var serviceInterface = implementationType.GetInterfaces()
+            .FirstOrDefault(i =>
+            {
+                var iName = i.Name;
+                var iBacktick = iName.IndexOf('`');
+                if (iBacktick > 0) iName = iName[..iBacktick];
+                return iName == interfaceName;
+            });
+
+        if (serviceInterface != null)
+        {
+            return serviceInterface.IsGenericType ? serviceInterface.GetGenericTypeDefinition() : serviceInterface;
+        }
+
+        // Fallback: use first open generic interface
+        var genericInterfaces = implementationType.GetInterfaces()
+            .Where(i => i.IsGenericType)
+            .ToArray();
+
+        if (genericInterfaces.Length == 1)
+            return genericInterfaces[0].GetGenericTypeDefinition();
+
+        return null;
     }
 
     /// <summary>
@@ -302,17 +513,22 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Profile filtering logic that remains unchanged from the original implementation.
-    /// This method demonstrates how stable, working logic can be preserved during system enhancements.
+    /// Profile filtering logic for ServiceRegistrationAttribute.
     /// </summary>
     private static bool ShouldRegisterForProfile(ServiceRegistrationAttribute attribute, string? profile)
     {
-        // If no profile is specified in either the attribute or the options, register the service
-        if (string.IsNullOrEmpty(profile) || string.IsNullOrEmpty(attribute.Profile))
+        return ShouldRegisterForProfile(attribute.Profile, profile);
+    }
+
+    /// <summary>
+    /// Profile filtering logic that checks whether a service's profile matches the active profile.
+    /// </summary>
+    private static bool ShouldRegisterForProfile(string? attributeProfile, string? activeProfile)
+    {
+        if (string.IsNullOrEmpty(activeProfile) || string.IsNullOrEmpty(attributeProfile))
             return true;
 
-        // Case-insensitive profile matching ensures flexibility in profile naming
-        return string.Equals(attribute.Profile, profile, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(attributeProfile, activeProfile, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

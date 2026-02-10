@@ -22,6 +22,22 @@ namespace FS.AutoServiceDiscovery.Extensions.DependencyInjection;
 /// 4. Performance monitoring and metrics
 /// 5. Logging and debugging options
 /// </summary>
+/// <remarks>
+/// Use this class with <see cref="AutoDiscoveryServiceCollectionExtensions.AddAutoDiscoveryInfrastructure"/>
+/// to configure the infrastructure components of the auto-discovery system.
+/// </remarks>
+/// <example>
+/// <code>
+/// services.AddAutoDiscoveryInfrastructure(options =>
+/// {
+///     options.EnablePerformanceMetrics = true;
+///     options.CacheConfiguration = CacheConfiguration.ForProduction();
+///     options.AddNamingConvention&lt;CustomNamingConvention&gt;();
+///     options.AddPlugin&lt;CustomDiscoveryPlugin&gt;();
+/// });
+/// </code>
+/// </example>
+/// <seealso cref="AutoDiscoveryServiceCollectionExtensions"/>
 public class AutoDiscoveryInfrastructureOptions
 {
     /// <summary>

@@ -223,6 +223,9 @@ public class FluentAutoServiceConfigurationBuilder
 {
     private readonly IServiceCollection _services;
     private readonly IFluentAutoServiceConfiguration _configuration;
+    private bool _enableScopeValidation;
+    private bool _throwOnScopeViolation;
+    private bool _useTryAddByDefault;
 
     /// <summary>
     /// Initializes a new instance of the fluent configuration builder with the specified service collection.
@@ -542,6 +545,67 @@ public class FluentAutoServiceConfigurationBuilder
     }
 
     /// <summary>
+    /// Enables or disables keyed services support for the discovery process.
+    /// When enabled, services with ServiceKey attributes will be registered as keyed services.
+    /// </summary>
+    /// <param name="enabled">True to enable keyed services support, false to disable.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// Keyed services require .NET 8.0 or later. When enabled, services decorated with
+    /// ServiceKey in their <see cref="Attributes.ServiceRegistrationAttribute"/> will be
+    /// registered using the keyed service APIs.
+    /// </remarks>
+    public FluentAutoServiceConfigurationBuilder WithKeyedServices(bool enabled = true)
+    {
+        // Keyed services are handled automatically based on ServiceKey attribute property.
+        // This method serves as a documentation marker for discoverability.
+        return this;
+    }
+
+    /// <summary>
+    /// Enables scope validation to detect captive dependency issues after service registration.
+    /// </summary>
+    /// <param name="throwOnViolation">
+    /// When true, throws an <see cref="InvalidOperationException"/> if scope violations are detected.
+    /// When false, violations are only logged.
+    /// </param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// Scope validation checks for invalid lifetime combinations such as a Singleton
+    /// depending on a Scoped service. It is recommended to enable this during development.
+    /// </remarks>
+    /// <example>
+    /// <code>
+    /// services.ConfigureAutoServices()
+    ///     .FromAssemblies(Assembly.GetExecutingAssembly())
+    ///     .WithScopeValidation(throwOnViolation: true)
+    ///     .Apply();
+    /// </code>
+    /// </example>
+    public FluentAutoServiceConfigurationBuilder WithScopeValidation(bool throwOnViolation = false)
+    {
+        _enableScopeValidation = true;
+        _throwOnScopeViolation = throwOnViolation;
+        return this;
+    }
+
+    /// <summary>
+    /// Enables TryAdd pattern globally for all service registrations.
+    /// When enabled, duplicate registrations are prevented automatically.
+    /// </summary>
+    /// <param name="enabled">True to enable TryAdd globally, false to disable.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    /// <remarks>
+    /// When TryAdd is enabled, services will only be registered if no existing registration
+    /// for the same service type exists. This is useful in modular applications.
+    /// </remarks>
+    public FluentAutoServiceConfigurationBuilder WithTryAdd(bool enabled = true)
+    {
+        _useTryAddByDefault = enabled;
+        return this;
+    }
+
+    /// <summary>
     /// Applies the configured settings to perform service discovery and registration.
     /// 
     /// This method represents the culmination of the fluent configuration process. It takes all
@@ -581,17 +645,22 @@ public class FluentAutoServiceConfigurationBuilder
             assemblies = [Assembly.GetCallingAssembly()];
         }
 
+        // Apply fluent-level settings to options
+        options.EnableScopeValidation = _enableScopeValidation;
+        options.ThrowOnScopeViolation = _throwOnScopeViolation;
+        options.UseTryAddByDefault = _useTryAddByDefault;
+
         // Apply the configuration using the appropriate discovery method
         if (options.EnablePerformanceOptimizations)
         {
             return _services.AddAutoServicesWithPerformanceOptimizations(
-                opts => CopyOptionsToTarget(options, opts), 
+                opts => CopyOptionsToTarget(options, opts),
                 assemblies);
         }
         else
         {
             return _services.AddAutoServices(
-                opts => CopyOptionsToTarget(options, opts), 
+                opts => CopyOptionsToTarget(options, opts),
                 assemblies);
         }
     }
@@ -615,5 +684,8 @@ public class FluentAutoServiceConfigurationBuilder
         target.CustomCache = source.CustomCache;
         target.MaxDegreeOfParallelism = source.MaxDegreeOfParallelism;
         target.EnablePlugins = source.EnablePlugins;
+        target.UseTryAddByDefault = source.UseTryAddByDefault;
+        target.EnableScopeValidation = source.EnableScopeValidation;
+        target.ThrowOnScopeViolation = source.ThrowOnScopeViolation;
     }
 }

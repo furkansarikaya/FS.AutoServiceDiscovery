@@ -1,12 +1,12 @@
 # Getting Started with FS.AutoServiceDiscovery.Extensions
 
-This comprehensive guide will walk you through everything you need to know to start using FS.AutoServiceDiscovery.Extensions in your .NET 9.0 application. Think of this as your step-by-step roadmap from installation to advanced usage.
+This comprehensive guide will walk you through everything you need to know to start using FS.AutoServiceDiscovery.Extensions in your .NET 10.0 application. Think of this as your step-by-step roadmap from installation to advanced usage.
 
 ## 📋 Prerequisites
 
 Before we begin, ensure you have the following:
 
-- **.NET 9.0 SDK** or later installed
+- **.NET 10.0 SDK** or later installed
 - Basic understanding of **Dependency Injection** concepts
 - Familiarity with **.NET attributes** and **reflection**
 
@@ -22,7 +22,7 @@ dotnet add package FS.AutoServiceDiscovery.Extensions
 Install-Package FS.AutoServiceDiscovery.Extensions
 
 # Using PackageReference in your .csproj file
-<PackageReference Include="FS.AutoServiceDiscovery.Extensions" Version="9.0.0" />
+<PackageReference Include="FS.AutoServiceDiscovery.Extensions" Version="10.0.2" />
 ```
 
 ### Step 2: Verify Installation
@@ -32,11 +32,11 @@ After installation, verify that the package is properly referenced in your proje
 ```xml
 <Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="FS.AutoServiceDiscovery.Extensions" Version="9.0.0" />
+    <PackageReference Include="FS.AutoServiceDiscovery.Extensions" Version="10.0.2" />
   </ItemGroup>
 </Project>
 ```
@@ -354,7 +354,7 @@ public class ServiceRegistrationTests
     }
     
     [Fact]
-    public async void UserService_Should_Return_Users()
+    public async Task UserService_Should_Return_Users()
     {
         // Arrange
         var services = new ServiceCollection();
@@ -435,9 +435,12 @@ public class UserService : IUserService, IDisposable, IAsyncDisposable { }
 Now that you have the basics working, explore these advanced features:
 
 1. **[Environment-Specific Services](ConditionalRegistration.md)** - Register different implementations per environment
-2. **[Fluent Configuration](FluentConfiguration.md)** - Use the chainable configuration API
-3. **[Performance Optimization](PerformanceOptimization.md)** - Enable caching and parallel processing
-4. **[Custom Naming Conventions](CustomNamingConventions.md)** - Create your own resolution rules
+2. **[Keyed Services](KeyedServices.md)** - Register multiple implementations with unique keys
+3. **[Open Generics](OpenGenerics.md)** - Automatic registration for generic patterns like `IRepository<T>`
+4. **[Decorator Pattern](DecoratorPattern.md)** - Wrap services with cross-cutting concerns
+5. **[Fluent Configuration](FluentConfiguration.md)** - Use the chainable configuration API
+6. **[Performance Optimization](PerformanceOptimization.md)** - Enable caching and parallel processing
+7. **[Scope Validation](ScopeValidation.md)** - Detect captive dependency issues at startup
 
 ## 💡 Best Practices for Beginners
 

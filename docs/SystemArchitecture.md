@@ -373,11 +373,33 @@ The architecture successfully achieves its primary design goals:
 ✅ **Reliability**: Robust error handling and graceful degradation
 ✅ **Usability**: Intuitive APIs with excellent developer experience
 
-## 🔗 Related Documentation
+## v10.0.2 Architecture Additions
+
+### Keyed Service Registration
+
+The registration pipeline now supports keyed services, allowing multiple implementations of the same interface to coexist in the DI container. The `ServiceKey` property on `ServiceRegistrationAttribute` is propagated through `ServiceRegistrationInfo` to the final `ServiceDescriptor` creation.
+
+### Decorator Pipeline
+
+Decorators are processed in a separate phase AFTER all standard services are registered. This ensures the decorated service exists before the decorator wraps it. Multiple decorators are chained in `Order` sequence, with each decorator wrapping the previous one.
+
+### Scope Validation
+
+A post-registration validation step analyzes constructor dependencies to detect captive dependency issues. The `ScopeValidator` examines the `IServiceCollection` after all registrations are complete, checking for invalid lifetime combinations (e.g., Singleton -> Scoped).
+
+### Open Generic Support
+
+The `OptimizedTypeScanner` now supports open generic types via `OpenGenericRegistrationAttribute`. The `IsTypeCandidate` method distinguishes between standard types (needing `ServiceRegistrationAttribute`) and generic type definitions (needing `OpenGenericRegistrationAttribute`).
+
+## Related Documentation
 
 - **[Getting Started](GettingStarted.md)** - Basic setup and usage
 - **[Performance Optimization](PerformanceOptimization.md)** - Detailed performance tuning
 - **[Plugin Architecture](PluginArchitecture.md)** - Plugin development guide
 - **[Conditional Registration](ConditionalRegistration.md)** - Advanced conditional logic
+- **[Keyed Services](KeyedServices.md)** - Keyed service architecture
+- **[Decorator Pattern](DecoratorPattern.md)** - Decorator pipeline details
+- **[Scope Validation](ScopeValidation.md)** - Scope validation architecture
+- **[Open Generics](OpenGenerics.md)** - Open generic support details
 
 The architecture of FS.AutoServiceDiscovery.Extensions represents a carefully balanced approach to creating a powerful, flexible, and maintainable service discovery system. Each architectural decision supports the overall goals of performance, extensibility, and developer productivity.
