@@ -9,7 +9,7 @@
 
         <!-- Package Information -->
         <PackageId>FS.AutoServiceDiscovery.Extensions</PackageId>
-        <Version>10.0.2</Version>
+        <Version>10.0.3</Version>
         <Authors>Furkan SARIKAYA</Authors>
         <Company>Furkan SARIKAYA</Company>
         <Description>Convention-based automatic service registration for .NET applications. Discovers and registers Services, Repositories, and other dependencies with minimal configuration. Supports multiple lifetime scopes and custom naming conventions.</Description>
@@ -22,6 +22,7 @@
         <RepositoryType>git</RepositoryType>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageIcon>icon.png</PackageIcon>
         <PackageReleaseNotes>v10.0.2: Added Keyed Services, TryAdd pattern, Multiple Interface Registration, Open Generics, Decorator Pattern, Scope Validation, System.Diagnostics.Metrics telemetry, ILogger integration, security hardening, and production readiness improvements.</PackageReleaseNotes>
         <LangVersion>latest</LangVersion>
 
@@ -47,17 +48,24 @@
         <NoWarn>$(NoWarn);1591</NoWarn>
     </PropertyGroup>
 
+    <!-- Package Dependencies -->
     <ItemGroup>
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.2" />
-        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.2" />
-        <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="10.0.2" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.2" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.2" />
-        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.2" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.3" />
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+        <PackageReference Include="Microsoft.Extensions.DependencyModel" Version="10.0.3" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.3" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.3" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.3" />
     </ItemGroup>
 
+    <!-- Include README in package -->
     <ItemGroup>
         <None Include="..\..\README.md" Pack="true" PackagePath="\"/>
+    </ItemGroup>
+
+    <!-- Package Icon Configuration -->
+    <ItemGroup>
+        <None Include="icon.png" Pack="true" PackagePath="" />
     </ItemGroup>
 
 </Project>
