@@ -100,14 +100,28 @@ public class FluentAutoServiceConfiguration : IFluentAutoServiceConfiguration
 
         foreach (var path in assemblyPaths.Where(p => !string.IsNullOrWhiteSpace(p)))
         {
+            // Security: validate the path is a valid file with a DLL extension to prevent arbitrary file loading
+            var fullPath = Path.GetFullPath(path);
+            var extension = Path.GetExtension(fullPath);
+            if (!string.Equals(extension, ".dll", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(extension, ".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new ArgumentException($"Assembly path must point to a .dll or .exe file: '{path}'", nameof(assemblyPaths));
+            }
+
+            if (!File.Exists(fullPath))
+            {
+                throw new FileNotFoundException($"Assembly file not found: '{fullPath}'", fullPath);
+            }
+
             try
             {
-                var assembly = Assembly.LoadFrom(path);
+                var assembly = Assembly.LoadFrom(fullPath);
                 loadedAssemblies.Add(assembly);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not ArgumentException and not FileNotFoundException)
             {
-                throw new InvalidOperationException($"Failed to load assembly from path '{path}': {ex.Message}", ex);
+                throw new InvalidOperationException($"Failed to load assembly from path '{fullPath}': {ex.Message}", ex);
             }
         }
 

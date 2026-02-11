@@ -1,65 +1,48 @@
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using FS.AutoServiceDiscovery.Extensions.Attributes;
 using FS.AutoServiceDiscovery.Extensions.Configuration;
+using FS.AutoServiceDiscovery.Extensions.Diagnostics;
 using FS.AutoServiceDiscovery.Extensions.Performance;
 using FS.AutoServiceDiscovery.Extensions.Validation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FS.AutoServiceDiscovery.Extensions;
 
 /// <summary>
 /// Enhanced extension methods for IServiceCollection that support both traditional and expression-based
 /// conditional service registration.
-/// 
-/// This enhanced implementation demonstrates how sophisticated systems can evolve while maintaining
-/// backward compatibility. Like adding smart features to a car while keeping the basic driving
-/// experience familiar, we're adding powerful expression capabilities while ensuring existing
-/// code continues to work without modification.
-/// 
-/// The key insight here is that we're not replacing the old system - we're extending it. This
-/// approach allows teams to migrate gradually, adopting the new expression-based system at their
-/// own pace while maintaining their existing investments in string-based conditions.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Automatically discovers and registers services marked with ServiceRegistrationAttribute 
+    /// Automatically discovers and registers services marked with ServiceRegistrationAttribute
     /// from the specified assemblies using default options.
-    /// 
-    /// This method serves as the entry point for the enhanced conditional registration system.
-    /// Under the hood, it now supports both traditional string-based conditions and the new
-    /// expression-based DSL, making the transition seamless for developers.
     /// </summary>
     /// <param name="services">The service collection to add services to</param>
     /// <param name="assemblies">The assemblies to scan for services. If none provided, uses the calling assembly</param>
     /// <returns>The service collection for method chaining</returns>
-    /// <example>
-    /// Simple usage that works with both old and new conditional styles:
-    /// <code>
-    /// services.AddAutoServices(Assembly.GetExecutingAssembly());
-    /// </code>
-    /// </example>
+    [RequiresUnreferencedCode("Auto service discovery uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAutoServices(this IServiceCollection services,
         params Assembly[] assemblies)
     {
         return AddAutoServices(services, null, assemblies);
     }
-    
+
     /// <summary>
     /// Enhanced service discovery method that supports the new expression-based conditional system
     /// while maintaining full backward compatibility with existing string-based conditions.
-    /// 
-    /// This method represents the evolution of our service discovery system. Think of it like
-    /// upgrading from a basic calculator to a scientific calculator - the basic math operations
-    /// still work exactly the same way, but now you have access to much more sophisticated
-    /// mathematical functions when you need them.
     /// </summary>
     /// <param name="services">The service collection to add services to</param>
     /// <param name="configureOptions">Optional configuration action for customizing discovery behavior</param>
     /// <param name="assemblies">The assemblies to scan for services</param>
     /// <returns>The service collection for method chaining</returns>
+    [RequiresUnreferencedCode("Auto service discovery uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAutoServices(this IServiceCollection services,
         Action<AutoServiceOptions>? configureOptions = null,
         params Assembly[] assemblies)
@@ -67,47 +50,58 @@ public static class ServiceCollectionExtensions
         var options = new AutoServiceOptions();
         configureOptions?.Invoke(options);
 
-        // Performance optimization: if performance enhancements are enabled, delegate to the optimized version
-        // This demonstrates how we can layer optimizations on top of our enhanced functionality
         if (options.EnablePerformanceOptimizations)
         {
             return services.AddAutoServicesWithPerformanceOptimizations(configureOptions, assemblies);
         }
 
-        // Continue with our enhanced legacy implementation that now supports expression-based conditions
         return AddAutoServicesEnhanced(services, options, assemblies);
     }
-    
+
     /// <summary>
     /// Enhanced implementation of service discovery that integrates the new expression-based
     /// conditional system while preserving all existing functionality.
-    /// 
-    /// This method demonstrates a thoughtful approach to system evolution. Rather than breaking
-    /// existing functionality, we've enhanced the evaluation engine to understand both old and
-    /// new conditional formats. This allows teams to migrate at their own pace while immediately
-    /// benefiting from improved capabilities.
     /// </summary>
+    [RequiresUnreferencedCode("Auto service discovery uses reflection to scan assemblies and types.")]
     private static IServiceCollection AddAutoServicesEnhanced(IServiceCollection services, AutoServiceOptions options, Assembly[] assemblies)
     {
-        // Default to calling assembly if none specified - maintains existing behavior
+        using var activity = AutoServiceDiscoveryMetrics.ActivitySource.StartActivity("ServiceDiscovery");
+        var stopwatch = Stopwatch.StartNew();
+
+        var logger = ResolveLogger(services);
+
         if (assemblies.Length == 0)
         {
             assemblies = [Assembly.GetCallingAssembly()];
         }
 
-        var servicesToRegister = new List<ServiceRegistrationInfo>();
+        activity?.SetTag("assembly.count", assemblies.Length);
+
+        var servicesToRegister = new List<ServiceRegistrationInfo>(capacity: 64);
         var decoratorsToApply = new List<(Type DecoratorType, Type ServiceType, int Order)>();
 
-        // Create the enhanced conditional context once for all evaluations
         var conditionalContext = CreateConditionalContext(options);
 
         foreach (var assembly in assemblies)
         {
-            // Scan for standard service candidates
-            var types = assembly.GetTypes()
-                .Where(t => t.IsClass && !t.IsAbstract);
+            AutoServiceDiscoveryMetrics.AssembliesScanned.Add(1);
+            var assemblyStopwatch = Stopwatch.StartNew();
 
-            foreach (var implementationType in types)
+            Type[] types;
+            try
+            {
+                types = assembly.GetTypes();
+            }
+            catch (ReflectionTypeLoadException ex)
+            {
+                logger.LogWarning("Assembly '{AssemblyName}' has type loading issues. Some types may be skipped.",
+                    assembly.GetName().Name);
+                types = ex.Types.Where(t => t != null).Cast<Type>().ToArray();
+            }
+
+            var candidateTypes = types.Where(t => t.IsClass && !t.IsAbstract);
+
+            foreach (var implementationType in candidateTypes)
             {
                 // Check for decorator attribute
                 var decoratorAttr = implementationType.GetCustomAttribute<DecoratorServiceAttribute>();
@@ -115,6 +109,18 @@ public static class ServiceCollectionExtensions
                 {
                     if (!ShouldRegisterForProfile(decoratorAttr.Profile, options.Profile))
                         continue;
+
+                    // Validate decorator implements the target interface
+                    if (!decoratorAttr.DecoratedServiceType.IsAssignableFrom(implementationType))
+                    {
+                        logger.LogWarning(
+                            "Decorator '{DecoratorType}' does not implement decorated service type '{ServiceType}'. Skipping.",
+                            implementationType.Name, decoratorAttr.DecoratedServiceType.Name);
+                        AutoServiceDiscoveryMetrics.ServicesSkipped.Add(1,
+                            new KeyValuePair<string, object?>("reason", "invalid_decorator"));
+                        continue;
+                    }
+
                     decoratorsToApply.Add((implementationType, decoratorAttr.DecoratedServiceType, decoratorAttr.Order));
                     continue;
                 }
@@ -147,19 +153,27 @@ public static class ServiceCollectionExtensions
                 if (attribute == null)
                     continue;
 
-                // Profile filtering
                 if (!ShouldRegisterForProfile(attribute, options.Profile))
+                {
+                    AutoServiceDiscoveryMetrics.ServicesSkipped.Add(1,
+                        new KeyValuePair<string, object?>("reason", "profile_mismatch"));
                     continue;
+                }
 
-                // Test environment filtering
                 if (options.IsTestEnvironment && attribute.IgnoreInTests)
+                {
+                    AutoServiceDiscoveryMetrics.ServicesSkipped.Add(1,
+                        new KeyValuePair<string, object?>("reason", "test_excluded"));
                     continue;
+                }
 
-                // Enhanced conditional filtering
-                if (!ShouldRegisterConditionalEnhanced(implementationType, conditionalContext, options))
+                if (!ShouldRegisterConditionalEnhanced(implementationType, conditionalContext, options, logger))
+                {
+                    AutoServiceDiscoveryMetrics.ServicesSkipped.Add(1,
+                        new KeyValuePair<string, object?>("reason", "conditional_failed"));
                     continue;
+                }
 
-                // Determine UseTryAdd: attribute-level overrides global default
                 var useTryAdd = attribute.UseTryAdd || options.UseTryAddByDefault;
 
                 // Multiple interface registration
@@ -183,7 +197,6 @@ public static class ServiceCollectionExtensions
                 }
                 else
                 {
-                    // Single service type (standard behavior)
                     var serviceType = DetermineServiceType(implementationType, attribute);
                     if (serviceType != null)
                     {
@@ -202,41 +215,46 @@ public static class ServiceCollectionExtensions
                     }
                 }
             }
+
+            assemblyStopwatch.Stop();
+            AutoServiceDiscoveryMetrics.AssemblyScanDuration.Record(assemblyStopwatch.Elapsed.TotalMilliseconds,
+                new KeyValuePair<string, object?>("assembly", assembly.GetName().Name ?? "unknown"));
         }
 
         // Register services ordered by priority
         foreach (var serviceInfo in servicesToRegister.OrderBy(s => s.Order))
         {
-            RegisterService(services, serviceInfo, options);
+            RegisterService(services, serviceInfo, logger);
         }
 
         // Apply decorators after all services are registered (ordered by Order)
         foreach (var (decoratorType, serviceType, _) in decoratorsToApply.OrderBy(d => d.Order))
         {
-            RegisterDecorator(services, serviceType, decoratorType);
+            RegisterDecorator(services, serviceType, decoratorType, logger);
+            AutoServiceDiscoveryMetrics.DecoratorsApplied.Add(1);
 
-            if (options.EnableLogging)
-            {
-                Console.WriteLine($"Decorated: {serviceType.Name} with {decoratorType.Name}");
-            }
+            logger.LogDebug("Decorated: {ServiceType} with {DecoratorType}", serviceType.Name, decoratorType.Name);
         }
 
         // Scope validation
         if (options.EnableScopeValidation)
         {
+            var validationStopwatch = Stopwatch.StartNew();
             var validationResult = ScopeValidator.ValidateScopes(services);
+            validationStopwatch.Stop();
 
-            if (options.EnableLogging)
+            AutoServiceDiscoveryMetrics.ScopeValidationDuration.Record(validationStopwatch.Elapsed.TotalMilliseconds);
+            AutoServiceDiscoveryMetrics.ScopeViolations.Add(validationResult.Violations.Count);
+            AutoServiceDiscoveryMetrics.ScopeWarnings.Add(validationResult.Warnings.Count);
+
+            foreach (var warning in validationResult.Warnings)
             {
-                foreach (var warning in validationResult.Warnings)
-                {
-                    Console.WriteLine($"Scope Warning: {warning.Message}");
-                }
+                logger.LogWarning("Scope Warning: {Message}", warning.Message);
+            }
 
-                foreach (var violation in validationResult.Violations)
-                {
-                    Console.WriteLine($"Scope Violation: {violation.Message}");
-                }
+            foreach (var violation in validationResult.Violations)
+            {
+                logger.LogError("Scope Violation: {Message}", violation.Message);
             }
 
             if (!validationResult.IsValid && options.ThrowOnScopeViolation)
@@ -247,13 +265,21 @@ public static class ServiceCollectionExtensions
             }
         }
 
+        stopwatch.Stop();
+        AutoServiceDiscoveryMetrics.DiscoveryDuration.Record(stopwatch.Elapsed.TotalMilliseconds);
+        activity?.SetTag("services.registered", servicesToRegister.Count);
+
+        logger.LogInformation(
+            "Service discovery completed in {Duration:F1}ms. Registered {Count} services from {AssemblyCount} assemblies.",
+            stopwatch.Elapsed.TotalMilliseconds, servicesToRegister.Count, assemblies.Length);
+
         return services;
     }
 
     /// <summary>
     /// Registers a single service with support for keyed services and TryAdd pattern.
     /// </summary>
-    private static void RegisterService(IServiceCollection services, ServiceRegistrationInfo serviceInfo, AutoServiceOptions options)
+    private static void RegisterService(IServiceCollection services, ServiceRegistrationInfo serviceInfo, ILogger logger)
     {
         ServiceDescriptor descriptor;
 
@@ -264,6 +290,7 @@ public static class ServiceCollectionExtensions
                 serviceInfo.ServiceKey,
                 serviceInfo.ImplementationType,
                 serviceInfo.Lifetime);
+            AutoServiceDiscoveryMetrics.KeyedRegistrations.Add(1);
         }
         else
         {
@@ -275,30 +302,41 @@ public static class ServiceCollectionExtensions
 
         if (serviceInfo.UseTryAdd)
         {
+            var countBefore = services.Count;
             services.TryAdd(descriptor);
+            if (services.Count == countBefore)
+            {
+                AutoServiceDiscoveryMetrics.DuplicatesPrevented.Add(1);
+                logger.LogDebug("TryAdd skipped duplicate: {ServiceType}", serviceInfo.ServiceType.Name);
+                return;
+            }
         }
         else
         {
             services.Add(descriptor);
         }
 
-        if (options.EnableLogging)
-        {
-            var keyInfo = serviceInfo.ServiceKey != null ? $", Key: {serviceInfo.ServiceKey}" : "";
-            var tryAddInfo = serviceInfo.UseTryAdd ? ", TryAdd" : "";
-            Console.WriteLine($"Registered: {serviceInfo.ServiceType.Name} -> {serviceInfo.ImplementationType.Name} " +
-                              $"({serviceInfo.Lifetime}, Order: {serviceInfo.Order}{keyInfo}{tryAddInfo})");
-        }
+        AutoServiceDiscoveryMetrics.ServicesRegistered.Add(1,
+            new KeyValuePair<string, object?>("lifetime", serviceInfo.Lifetime.ToString()));
+
+        logger.LogDebug("Registered: {ServiceType} -> {ImplementationType} ({Lifetime}, Order: {Order})",
+            serviceInfo.ServiceType.Name, serviceInfo.ImplementationType.Name,
+            serviceInfo.Lifetime, serviceInfo.Order);
     }
 
     /// <summary>
     /// Registers a decorator that wraps an existing service registration.
     /// The decorator must implement the same interface and accept it via constructor injection.
     /// </summary>
-    private static void RegisterDecorator(IServiceCollection services, Type serviceType, Type decoratorType)
+    private static void RegisterDecorator(IServiceCollection services, Type serviceType, Type decoratorType, ILogger logger)
     {
         var existingDescriptor = services.LastOrDefault(d => d.ServiceType == serviceType);
-        if (existingDescriptor == null) return;
+        if (existingDescriptor == null)
+        {
+            logger.LogWarning("Cannot apply decorator '{DecoratorType}': no existing registration for '{ServiceType}'.",
+                decoratorType.Name, serviceType.Name);
+            return;
+        }
 
         services.Remove(existingDescriptor);
 
@@ -337,8 +375,6 @@ public static class ServiceCollectionExtensions
         if (attribute.ServiceType != null)
             return attribute.ServiceType;
 
-        // Convention: look for an open generic interface matching I{ClassName} pattern
-        // For Repository`1, look for IRepository`1
         var baseName = implementationType.Name;
         var backtickIndex = baseName.IndexOf('`');
         if (backtickIndex > 0)
@@ -352,7 +388,7 @@ public static class ServiceCollectionExtensions
                 var iName = i.Name;
                 var iBacktick = iName.IndexOf('`');
                 if (iBacktick > 0) iName = iName[..iBacktick];
-                return iName == interfaceName;
+                return string.Equals(iName, interfaceName, StringComparison.Ordinal);
             });
 
         if (serviceInterface != null)
@@ -360,7 +396,6 @@ public static class ServiceCollectionExtensions
             return serviceInterface.IsGenericType ? serviceInterface.GetGenericTypeDefinition() : serviceInterface;
         }
 
-        // Fallback: use first open generic interface
         var genericInterfaces = implementationType.GetInterfaces()
             .Where(i => i.IsGenericType)
             .ToArray();
@@ -372,143 +407,46 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Creates a rich conditional context that provides the foundation for expression-based conditions.
-    /// 
-    /// Think of this method as setting up a "control room" that your conditional expressions can use
-    /// to gather information about the current environment, configuration, and application state.
-    /// The context provides a standardized way for expressions to access all the information they
-    /// need to make intelligent registration decisions.
-    /// 
-    /// This factory method demonstrates good separation of concerns - it isolates the context
-    /// creation logic so that it can be easily tested, modified, or extended without affecting
-    /// the main discovery logic.
+    /// Creates a conditional context for expression-based conditions.
     /// </summary>
-    /// <param name="options">The current auto service options containing configuration and environment info</param>
-    /// <returns>A fully configured conditional context ready for expression evaluation</returns>
     private static IConditionalContext CreateConditionalContext(AutoServiceOptions options)
     {
-        // Determine the current environment name from various sources
-        // This logic shows how we can intelligently detect the environment using multiple fallback strategies
-        var environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") 
+        var environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
                              ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
                              ?? (options.IsTestEnvironment ? "Testing" : "Production");
 
-        // Create the context with all available information
-        // The context becomes the "bridge" between the static attribute declarations and the dynamic runtime environment
-        var context = new ConditionalContext(options.Configuration, environmentName);
-
-        // Here's where you could extend the context with application-specific custom conditions
-        // For example, you might register conditions that check database connectivity,
-        // external service availability, or complex business rules
-        RegisterCustomConditions(context, options);
-
-        return context;
-    }
-
-    /// <summary>
-    /// Registers application-specific custom conditions that can be used in expressions.
-    /// 
-    /// This method demonstrates the extensibility of our conditional system. Just like a programming
-    /// language allows you to define your own functions, our conditional system allows applications
-    /// to define their own named conditions that can be used in expressions.
-    /// 
-    /// Think of custom conditions as "domain-specific vocabulary" for your conditional expressions.
-    /// Instead of writing complex logic in every expression, you can define named conditions once
-    /// and reuse them throughout your application.
-    /// </summary>
-    /// <param name="context">The conditional context to register custom conditions with</param>
-    /// <param name="options">The auto service options that might influence custom condition behavior</param>
-    private static void RegisterCustomConditions(ConditionalContext context, AutoServiceOptions options)
-    {
-        // Example: Register a custom condition for checking if the application is in maintenance mode
-        // This shows how complex business logic can be encapsulated in named conditions
-        context.RegisterCustomCondition("MaintenanceMode", () =>
-        {
-            // This could check multiple sources: configuration, database, external service, etc.
-            var configMaintenanceMode = options.Configuration?.GetValue<bool>("MaintenanceMode") ?? false;
-            var environmentMaintenanceMode = Environment.GetEnvironmentVariable("MAINTENANCE_MODE") == "true";
-            
-            return configMaintenanceMode || environmentMaintenanceMode;
-        });
-
-        // Example: Register a condition for checking if database connectivity is available
-        // This demonstrates how infrastructure concerns can be made available to service registration logic
-        context.RegisterCustomCondition("DatabaseAvailable", () =>
-        {
-            // In a real application, this might ping the database or check connection strings
-            // For this example, we'll use a simple configuration check
-            var connectionString = options.Configuration?.GetConnectionString("DefaultConnection");
-            return !string.IsNullOrEmpty(connectionString);
-        });
-
-        // Example: Register a condition for checking if external dependencies are healthy
-        // This shows how service registration can be made aware of external system availability
-        context.RegisterCustomCondition("ExternalServicesHealthy", () =>
-        {
-            // This could perform actual health checks or consult a service discovery system
-            // For demonstration, we'll use configuration-based health indicators
-            return options.Configuration?.GetValue<bool>("ExternalServices:AllHealthy") ?? true;
-        });
+        return new ConditionalContext(options.Configuration, environmentName);
     }
 
     /// <summary>
     /// Enhanced conditional evaluation that supports both traditional string-based conditions
     /// and the new expression-based conditional system.
-    /// 
-    /// This method represents the heart of our backward-compatible enhancement strategy. Like a
-    /// universal translator that can understand both old and new languages, this method can
-    /// evaluate conditions regardless of which format they're written in.
-    /// 
-    /// The key insight here is that we're not asking users to choose between old and new systems.
-    /// Instead, we're allowing them to use whichever approach is most appropriate for each specific
-    /// condition, and even mix and match approaches within the same application.
     /// </summary>
-    /// <param name="implementationType">The type being evaluated for conditional registration</param>
-    /// <param name="context">The rich conditional context for expression evaluation</param>
-    /// <param name="options">The auto service options for backward compatibility</param>
-    /// <returns>True if all conditional requirements are satisfied and the service should be registered</returns>
-    private static bool ShouldRegisterConditionalEnhanced(Type implementationType, IConditionalContext context, AutoServiceOptions options)
+    private static bool ShouldRegisterConditionalEnhanced(Type implementationType, IConditionalContext context,
+        AutoServiceOptions options, ILogger logger)
     {
-        // Get all conditional attributes from the type
-        // A service can have multiple conditional attributes, and ALL must be satisfied (AND logic)
         var conditionalAttributes = implementationType.GetCustomAttributes<ConditionalServiceAttribute>().ToArray();
 
-        // If no conditional attributes exist, the service should be registered unconditionally
-        // This maintains the existing behavior for services without conditional requirements
         if (conditionalAttributes.Length == 0)
             return true;
 
-        // Evaluate each conditional attribute using the enhanced evaluation system
-        // This loop demonstrates how we handle multiple conditions with AND logic
         foreach (var conditional in conditionalAttributes)
         {
             try
             {
-                // Use the enhanced attribute's evaluation method that automatically handles
-                // both string-based and expression-based conditions
                 if (!conditional.EvaluateCondition(context))
                 {
-                    // If any condition fails, the entire evaluation fails (AND logic)
-                    // This maintains the existing behavior while supporting new expression formats
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                // Graceful error handling: if a condition evaluation fails, log the error
-                // and treat the condition as failed rather than crashing the entire discovery process
-                if (options.EnableLogging)
-                {
-                    Console.WriteLine($"Warning: Failed to evaluate conditional for {implementationType.Name}: {ex.Message}");
-                }
-                
-                // Failed condition evaluation results in service not being registered
-                // This conservative approach ensures that registration errors don't cause runtime failures
+                logger.LogWarning(ex, "Failed to evaluate conditional for {TypeName}. Treating as not registered.",
+                    implementationType.Name);
                 return false;
             }
         }
 
-        // If we reach this point, all conditions passed successfully
         return true;
     }
 
@@ -533,31 +471,25 @@ public static class ServiceCollectionExtensions
 
     /// <summary>
     /// Service type determination using convention-based discovery.
-    /// This method remains unchanged, demonstrating how solid foundational logic can be preserved
-    /// while other parts of the system evolve and improve.
     /// </summary>
     private static Type? DetermineServiceType(Type implementationType, ServiceRegistrationAttribute attribute)
     {
-        // Explicit service type takes precedence over convention-based discovery
         if (attribute.ServiceType != null)
         {
             return attribute.ServiceType;
         }
 
-        // Convention-based discovery: look for I{ClassName} interface pattern
-        // This implements the widely-adopted .NET naming convention
         var interfaceName = $"I{implementationType.Name}";
         var serviceInterface = implementationType.GetInterfaces()
-            .FirstOrDefault(i => i.Name == interfaceName);
+            .FirstOrDefault(i => string.Equals(i.Name, interfaceName, StringComparison.Ordinal));
 
         if (serviceInterface != null)
         {
             return serviceInterface;
         }
 
-        // Fallback: if only one non-system interface exists, use it
         var interfaces = implementationType.GetInterfaces()
-            .Where(i => !i.Name.StartsWith("System."))
+            .Where(i => !i.Namespace?.StartsWith("System", StringComparison.Ordinal) == true)
             .ToArray();
 
         if (interfaces.Length == 1)
@@ -565,8 +497,20 @@ public static class ServiceCollectionExtensions
             return interfaces[0];
         }
 
-        // Final fallback: register the concrete type itself
-        // This enables scenarios where interface-based registration isn't desired
         return implementationType;
+    }
+
+    /// <summary>
+    /// Resolves an ILogger from the service collection, or returns a NullLogger.
+    /// </summary>
+    private static ILogger ResolveLogger(IServiceCollection services)
+    {
+        var loggerFactoryDescriptor = services.LastOrDefault(d => d.ServiceType == typeof(ILoggerFactory));
+        if (loggerFactoryDescriptor?.ImplementationInstance is ILoggerFactory factory)
+        {
+            return factory.CreateLogger("FS.AutoServiceDiscovery");
+        }
+
+        return NullLogger.Instance;
     }
 }

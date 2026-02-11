@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using FS.AutoServiceDiscovery.Extensions.Architecture;
 using FS.AutoServiceDiscovery.Extensions.Architecture.Conventions;
@@ -79,6 +80,7 @@ public static class FluentServiceCollectionExtensions
     ///     .Apply();
     /// </code>
     /// </example>
+    [RequiresUnreferencedCode("Auto service discovery uses reflection to scan assemblies and types.")]
     public static FluentAutoServiceConfigurationBuilder ConfigureAutoServices(this IServiceCollection services)
     {
         if (services == null) throw new ArgumentNullException(nameof(services));
@@ -129,6 +131,7 @@ public static class FluentServiceCollectionExtensions
     ///     .Apply();
     /// </code>
     /// </example>
+    [RequiresUnreferencedCode("Auto service discovery uses reflection to scan assemblies and types.")]
     public static FluentAutoServiceConfigurationBuilder ConfigureAutoServicesFromCurrentAssembly(this IServiceCollection services)
     {
         if (services == null) throw new ArgumentNullException(nameof(services));
@@ -189,6 +192,7 @@ public static class FluentServiceCollectionExtensions
     ///     .Apply();
     /// </code>
     /// </example>
+    [RequiresUnreferencedCode("Auto service discovery uses reflection to scan assemblies and types.")]
     public static FluentAutoServiceConfigurationBuilder ConfigureAutoServicesFromAssemblies(this IServiceCollection services, params Assembly[] assemblies)
     {
         if (services == null) throw new ArgumentNullException(nameof(services));
@@ -631,6 +635,7 @@ public class FluentAutoServiceConfigurationBuilder
     /// Thrown when the configuration validation fails or when the discovery process encounters
     /// critical errors that prevent successful service registration.
     /// </exception>
+    [RequiresUnreferencedCode("Auto service discovery uses reflection to scan assemblies and types.")]
     public IServiceCollection Apply()
     {
         // Build the options from the fluent configuration

@@ -1,6 +1,8 @@
 using System.Reflection;
 using FS.AutoServiceDiscovery.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FS.AutoServiceDiscovery.Extensions.Architecture;
 
@@ -67,13 +69,15 @@ public static class PluginServiceCollectionExtensions
             assemblies = [Assembly.GetCallingAssembly()];
         }
 
+        var logger = ResolveLogger(services);
         var orderedPlugins = plugins.OrderBy(p => p.Priority).ToList();
         var allDiscoveredServices = new List<ServiceRegistrationInfo>();
         var validationResults = new List<(IServiceDiscoveryPlugin Plugin, PluginValidationResult Result)>();
 
         if (options.EnableLogging)
         {
-            Console.WriteLine($"Starting plugin-based service discovery with {orderedPlugins.Count} plugins across {assemblies.Length} assemblies...");
+            logger.LogInformation("Starting plugin-based service discovery with {PluginCount} plugins across {AssemblyCount} assemblies...",
+                orderedPlugins.Count, assemblies.Length);
         }
 
         // Execute each plugin in priority order
@@ -81,7 +85,7 @@ public static class PluginServiceCollectionExtensions
         {
             if (options.EnableLogging)
             {
-                Console.WriteLine($"Executing plugin: {plugin.Name} (Priority: {plugin.Priority})");
+                logger.LogInformation("Executing plugin: {PluginName} (Priority: {Priority})", plugin.Name, plugin.Priority);
             }
 
             var pluginServices = new List<ServiceRegistrationInfo>();
@@ -93,13 +97,14 @@ public static class PluginServiceCollectionExtensions
                 {
                     var discoveredInAssembly = plugin.DiscoverServices(assembly, options);
                     pluginServices.AddRange(discoveredInAssembly);
-                    
+
                     if (options.EnableLogging)
                     {
                         var count = discoveredInAssembly.Count();
                         if (count > 0)
                         {
-                            Console.WriteLine($"  Plugin {plugin.Name} discovered {count} services in {assembly.GetName().Name}");
+                            logger.LogInformation("  Plugin {PluginName} discovered {Count} services in {AssemblyName}",
+                                plugin.Name, count, assembly.GetName().Name);
                         }
                     }
                 }
@@ -121,31 +126,31 @@ public static class PluginServiceCollectionExtensions
                 // Log validation results
                 if (options.EnableLogging && validationResult.HasMessages)
                 {
-                    LogValidationResults(plugin.Name, validationResult);
+                    LogValidationResults(logger, plugin.Name, validationResult);
                 }
             }
-            catch (Exception ex) when (!(ex is InvalidOperationException))
+            catch (Exception ex) when (ex is not InvalidOperationException)
             {
                 // Handle plugin exceptions gracefully
                 var errorMessage = $"Plugin '{plugin.Name}' encountered an error during discovery: {ex.Message}";
                 if (options.EnableLogging)
                 {
-                    Console.WriteLine($"ERROR: {errorMessage}");
+                    logger.LogError(ex, "Plugin {PluginName} encountered an error during discovery", plugin.Name);
                 }
-                
+
                 // Depending on configuration, either throw or continue with other plugins
                 throw new InvalidOperationException(errorMessage, ex);
             }
         }
 
         // Register all discovered services
-        RegisterDiscoveredServices(services, allDiscoveredServices, options);
+        RegisterDiscoveredServices(services, allDiscoveredServices, options, logger);
 
         // Provide summary information
-        if (!options.EnableLogging) 
+        if (!options.EnableLogging)
             return services;
-        Console.WriteLine($"Plugin discovery completed. Total services registered: {allDiscoveredServices.Count}");
-        LogDiscoverySummary(validationResults);
+        logger.LogInformation("Plugin discovery completed. Total services registered: {Count}", allDiscoveredServices.Count);
+        LogDiscoverySummary(logger, validationResults);
 
         return services;
     }
@@ -212,33 +217,31 @@ public static class PluginServiceCollectionExtensions
     /// Logs validation results in a structured, readable format that helps developers
     /// understand what happened during the validation process and what actions might be needed.
     /// </summary>
+    /// <param name="logger">The logger instance for structured logging.</param>
     /// <param name="pluginName">The name of the plugin that was validated.</param>
     /// <param name="result">The validation result containing messages to log.</param>
-    private static void LogValidationResults(string pluginName, PluginValidationResult result)
+    private static void LogValidationResults(ILogger logger, string pluginName, PluginValidationResult result)
     {
         if (result.Errors.Count != 0)
         {
-            Console.WriteLine($"  ERRORS in {pluginName}:");
             foreach (var error in result.Errors)
             {
-                Console.WriteLine($"    - {error}");
+                logger.LogError("Plugin {PluginName} validation error: {Error}", pluginName, error);
             }
         }
 
         if (result.Warnings.Count != 0)
         {
-            Console.WriteLine($"  WARNINGS in {pluginName}:");
             foreach (var warning in result.Warnings)
             {
-                Console.WriteLine($"    - {warning}");
+                logger.LogWarning("Plugin {PluginName} validation warning: {Warning}", pluginName, warning);
             }
         }
 
         if (result.Information.Count == 0) return;
-        Console.WriteLine($"  INFO from {pluginName}:");
         foreach (var info in result.Information)
         {
-            Console.WriteLine($"    - {info}");
+            logger.LogInformation("Plugin {PluginName}: {Info}", pluginName, info);
         }
     }
 
@@ -246,30 +249,28 @@ public static class PluginServiceCollectionExtensions
     /// Provides a summary of the entire discovery process, highlighting key metrics
     /// and any important issues that were found across all plugins.
     /// </summary>
+    /// <param name="logger">The logger instance for structured logging.</param>
     /// <param name="validationResults">The validation results from all plugins.</param>
-    private static void LogDiscoverySummary(List<(IServiceDiscoveryPlugin Plugin, PluginValidationResult Result)> validationResults)
+    private static void LogDiscoverySummary(ILogger logger, List<(IServiceDiscoveryPlugin Plugin, PluginValidationResult Result)> validationResults)
     {
         var totalErrors = validationResults.Sum(r => r.Result.Errors.Count);
         var totalWarnings = validationResults.Sum(r => r.Result.Warnings.Count);
         var pluginsWithIssues = validationResults.Count(r => r.Result.TotalIssueCount > 0);
 
-        Console.WriteLine($"Discovery Summary:");
-        Console.WriteLine($"  Plugins processed: {validationResults.Count}");
-        Console.WriteLine($"  Plugins with issues: {pluginsWithIssues}");
-        Console.WriteLine($"  Total errors: {totalErrors}");
-        Console.WriteLine($"  Total warnings: {totalWarnings}");
+        logger.LogInformation("Discovery Summary: {PluginCount} plugins processed, {IssueCount} with issues, {ErrorCount} errors, {WarningCount} warnings",
+            validationResults.Count, pluginsWithIssues, totalErrors, totalWarnings);
 
-        if (totalErrors == 0 && totalWarnings == 0)
+        if (totalErrors > 0)
         {
-            Console.WriteLine($"  Status: All plugins validated successfully with no issues!");
+            logger.LogError("Plugin discovery completed with {ErrorCount} critical errors - review error messages above", totalErrors);
         }
-        else if (totalErrors == 0)
+        else if (totalWarnings > 0)
         {
-            Console.WriteLine($"  Status: All plugins validated successfully, but check warnings above.");
+            logger.LogWarning("Plugin discovery completed successfully with {WarningCount} warnings", totalWarnings);
         }
         else
         {
-            Console.WriteLine($"  Status: Critical errors found - review error messages above.");
+            logger.LogInformation("All plugins validated successfully with no issues");
         }
     }
 
@@ -280,10 +281,12 @@ public static class PluginServiceCollectionExtensions
     /// <param name="services">The service collection to register services with.</param>
     /// <param name="discoveredServices">The services discovered by all plugins.</param>
     /// <param name="options">The configuration options for registration behavior.</param>
+    /// <param name="logger">The logger instance for structured logging.</param>
     private static void RegisterDiscoveredServices(
         IServiceCollection services,
         IEnumerable<ServiceRegistrationInfo> discoveredServices,
-        AutoServiceOptions options)
+        AutoServiceOptions options,
+        ILogger logger)
     {
         // Order services by priority and register them
         var orderedServices = discoveredServices.OrderBy(s => s.Order).ToList();
@@ -297,8 +300,17 @@ public static class PluginServiceCollectionExtensions
 
             if (options.EnableLogging)
             {
-                Console.WriteLine($"Registered: {serviceInfo.ServiceType.Name} -> {serviceInfo.ImplementationType.Name} ({serviceInfo.Lifetime})");
+                logger.LogDebug("Registered: {ServiceType} -> {ImplementationType} ({Lifetime})",
+                    serviceInfo.ServiceType.Name, serviceInfo.ImplementationType.Name, serviceInfo.Lifetime);
             }
         }
+    }
+
+    private static ILogger ResolveLogger(IServiceCollection services)
+    {
+        var factoryDescriptor = services.FirstOrDefault(d => d.ServiceType == typeof(ILoggerFactory));
+        if (factoryDescriptor?.ImplementationInstance is ILoggerFactory factory)
+            return factory.CreateLogger("FS.AutoServiceDiscovery.Plugins");
+        return NullLogger.Instance;
     }
 }

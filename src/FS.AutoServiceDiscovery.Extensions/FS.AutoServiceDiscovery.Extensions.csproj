@@ -22,7 +22,7 @@
         <RepositoryType>git</RepositoryType>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README.md</PackageReadmeFile>
-        <PackageReleaseNotes>v10.0.2: Added Keyed Services support (.NET 8+), TryAdd pattern for duplicate prevention, Multiple Interface Registration, Open Generics support, Decorator Pattern, and Scope Validation. Enhanced XML documentation across all public APIs.</PackageReleaseNotes>
+        <PackageReleaseNotes>v10.0.2: Added Keyed Services, TryAdd pattern, Multiple Interface Registration, Open Generics, Decorator Pattern, Scope Validation, System.Diagnostics.Metrics telemetry, ILogger integration, security hardening, and production readiness improvements.</PackageReleaseNotes>
         <LangVersion>latest</LangVersion>
 
         <!-- Code Quality -->
@@ -31,6 +31,15 @@
 
         <!-- Documentation -->
         <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+
+        <!-- Production Readiness -->
+        <Deterministic>true</Deterministic>
+        <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <IsAotCompatible>false</IsAotCompatible>
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(Configuration)'=='Release'">

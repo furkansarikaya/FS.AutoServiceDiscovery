@@ -5,6 +5,8 @@ using FS.AutoServiceDiscovery.Extensions.Architecture;
 using FS.AutoServiceDiscovery.Extensions.Architecture.Conventions;
 using FS.AutoServiceDiscovery.Extensions.Caching;
 using FS.AutoServiceDiscovery.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FS.AutoServiceDiscovery.Extensions.Performance;
 
@@ -34,14 +36,15 @@ public class OptimizedDiscoveryService : IOptimizedDiscoveryService
     private readonly INamingConventionResolver _conventionResolver;
     private readonly OptimizedTypeScanner _typeScanner;
     private readonly IPerformanceMetricsCollector _metricsCollector;
-    
+    private readonly ILogger<OptimizedDiscoveryService> _logger;
+
     // Performance tracking and optimization state
     private readonly ConcurrentDictionary<string, AssemblyPerformanceProfile> _assemblyProfiles = new();
     private readonly object _optimizationLock = new object();
 
     /// <summary>
     /// Initializes a new instance of the optimized discovery service with all required dependencies.
-    /// 
+    ///
     /// The dependency injection approach here ensures that this service can leverage all the
     /// specialized components we've built while remaining testable and configurable.
     /// </summary>
@@ -50,13 +53,15 @@ public class OptimizedDiscoveryService : IOptimizedDiscoveryService
         IPluginCoordinator pluginCoordinator,
         INamingConventionResolver conventionResolver,
         OptimizedTypeScanner typeScanner,
-        IPerformanceMetricsCollector metricsCollector)
+        IPerformanceMetricsCollector metricsCollector,
+        ILogger<OptimizedDiscoveryService> logger)
     {
         _assemblyCache = assemblyCache ?? throw new ArgumentNullException(nameof(assemblyCache));
         _pluginCoordinator = pluginCoordinator ?? throw new ArgumentNullException(nameof(pluginCoordinator));
         _conventionResolver = conventionResolver ?? throw new ArgumentNullException(nameof(conventionResolver));
         _typeScanner = typeScanner ?? throw new ArgumentNullException(nameof(typeScanner));
         _metricsCollector = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
@@ -81,7 +86,7 @@ public class OptimizedDiscoveryService : IOptimizedDiscoveryService
             
             if (options.EnableLogging)
             {
-                Console.WriteLine($"Starting optimized discovery for {assemblyList.Count} assemblies...");
+                _logger.LogInformation("Starting optimized discovery for {AssemblyCount} assemblies...", assemblyList.Count);
             }
 
             // Phase 1: Cache-based discovery - try to get as many results from cache as possible
@@ -124,9 +129,9 @@ public class OptimizedDiscoveryService : IOptimizedDiscoveryService
 
             if (options.EnableLogging)
             {
-                Console.WriteLine($"Optimized discovery completed in {overallStopwatch.ElapsedMilliseconds}ms. " +
-                                $"Found {result.AllDiscoveredServices.Count} services " +
-                                $"({result.CachedAssemblies.Count} from cache, {result.ProcessedAssemblies.Count} fresh)");
+                _logger.LogInformation("Optimized discovery completed in {ElapsedMs}ms. Found {TotalCount} services ({CachedCount} from cache, {FreshCount} fresh)",
+                    overallStopwatch.ElapsedMilliseconds, result.AllDiscoveredServices.Count,
+                    result.CachedAssemblies.Count, result.ProcessedAssemblies.Count);
             }
 
         }
@@ -140,7 +145,7 @@ public class OptimizedDiscoveryService : IOptimizedDiscoveryService
 
             if (options.EnableLogging)
             {
-                Console.WriteLine($"Optimized discovery failed after {overallStopwatch.ElapsedMilliseconds}ms: {ex.Message}");
+                _logger.LogError(ex, "Optimized discovery failed after {ElapsedMs}ms", overallStopwatch.ElapsedMilliseconds);
             }
         }
 
@@ -246,7 +251,7 @@ public class OptimizedDiscoveryService : IOptimizedDiscoveryService
                 foreach (var service in services.Where(s => s.ServiceType == s.ImplementationType))
                 {
                     var interfaces = service.ImplementationType.GetInterfaces()
-                        .Where(i => !i.Name.StartsWith("System."));
+                        .Where(i => !i.Namespace?.StartsWith("System", StringComparison.Ordinal) == true);
                     
                     var resolvedType = _conventionResolver.ResolveServiceType(service.ImplementationType, interfaces);
                     if (resolvedType != null)
@@ -267,7 +272,7 @@ public class OptimizedDiscoveryService : IOptimizedDiscoveryService
                 
                 if (options.EnableLogging)
                 {
-                    Console.WriteLine($"Error processing assembly {assembly.GetName().Name}: {ex.Message}");
+                    _logger.LogError(ex, "Error processing assembly {AssemblyName}", assembly.GetName().Name);
                 }
                 
                 return new List<ServiceRegistrationInfo>();
@@ -310,7 +315,7 @@ public class OptimizedDiscoveryService : IOptimizedDiscoveryService
 
             if (options.EnableLogging && deduplicated.Count != services.Count)
             {
-                Console.WriteLine($"Removed {services.Count - deduplicated.Count} duplicate service registrations");
+                _logger.LogInformation("Removed {Count} duplicate service registrations", services.Count - deduplicated.Count);
             }
 
             return deduplicated;

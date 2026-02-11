@@ -106,15 +106,16 @@ public class ConfigurationContext
 
         try
         {
-            // Handle common type conversions
+            // Handle common type conversions using invariant culture for safety
             return typeof(T) switch
             {
                 Type t when t == typeof(string) => (T)(object)value,
-                Type t when t == typeof(int) => (T)(object)int.Parse(value),
+                Type t when t == typeof(int) => (T)(object)int.Parse(value, System.Globalization.CultureInfo.InvariantCulture),
                 Type t when t == typeof(bool) => (T)(object)bool.Parse(value),
-                Type t when t == typeof(double) => (T)(object)double.Parse(value),
-                Type t when t == typeof(decimal) => (T)(object)decimal.Parse(value),
-                Type t when t == typeof(DateTime) => (T)(object)DateTime.Parse(value),
+                Type t when t == typeof(double) => (T)(object)double.Parse(value, System.Globalization.CultureInfo.InvariantCulture),
+                Type t when t == typeof(decimal) => (T)(object)decimal.Parse(value, System.Globalization.CultureInfo.InvariantCulture),
+                Type t when t == typeof(DateTime) => (T)(object)DateTime.Parse(value, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind),
                 _ => defaultValue
             };
         }

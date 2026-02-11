@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Reflection;
 using FS.AutoServiceDiscovery.Extensions.Configuration;
 using FS.AutoServiceDiscovery.Extensions.Performance;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FS.AutoServiceDiscovery.Extensions.Architecture;
 
@@ -29,20 +31,23 @@ public class PluginCoordinator : IPluginCoordinator
 {
     private readonly ConcurrentDictionary<string, IServiceDiscoveryPlugin> _registeredPlugins = new();
     private readonly IPerformanceMetricsCollector _metricsCollector;
+    private readonly ILogger<PluginCoordinator> _logger;
     private readonly PluginCoordinatorStatistics _statistics = new();
 
     /// <summary>
     /// Initializes a new instance of the plugin coordinator with the specified metrics collector.
-    /// 
+    ///
     /// The dependency injection approach here is crucial - by injecting the metrics collector,
     /// we enable the coordinator to be thoroughly observable while remaining testable.
     /// </summary>
     /// <param name="metricsCollector">
     /// The metrics collector for tracking plugin performance and coordination statistics.
     /// </param>
-    public PluginCoordinator(IPerformanceMetricsCollector metricsCollector)
+    /// <param name="logger">Logger for structured logging of plugin coordination activities.</param>
+    public PluginCoordinator(IPerformanceMetricsCollector metricsCollector, ILogger<PluginCoordinator> logger)
     {
         _metricsCollector = metricsCollector ?? throw new ArgumentNullException(nameof(metricsCollector));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
@@ -74,7 +79,8 @@ public class PluginCoordinator : IPluginCoordinator
         
         if (options.EnableLogging)
         {
-            Console.WriteLine($"Starting plugin coordination with {orderedPlugins.Count} plugins across {assemblyList.Count} assemblies...");
+            _logger.LogInformation("Starting plugin coordination with {PluginCount} plugins across {AssemblyCount} assemblies...",
+                orderedPlugins.Count, assemblyList.Count);
         }
 
         // Execute each plugin in isolation
@@ -91,17 +97,17 @@ public class PluginCoordinator : IPluginCoordinator
             {
                 if (options.EnableLogging)
                 {
-                    Console.WriteLine($"Executing plugin: {plugin.Name} (Priority: {plugin.Priority})");
+                    _logger.LogInformation("Executing plugin: {PluginName} (Priority: {Priority})", plugin.Name, plugin.Priority);
                 }
 
                 // Filter assemblies that this plugin can process
                 var relevantAssemblies = assemblyList.Where(plugin.CanProcessAssembly).ToList();
-                
+
                 if (relevantAssemblies.Count == 0)
                 {
                     if (options.EnableLogging)
                     {
-                        Console.WriteLine($"  Plugin {plugin.Name} has no relevant assemblies to process");
+                        _logger.LogDebug("Plugin {PluginName} has no relevant assemblies to process", plugin.Name);
                     }
                     pluginResult.ValidationResult = PluginValidationResult.Success();
                     result.PluginResults.Add(pluginResult);
@@ -120,10 +126,10 @@ public class PluginCoordinator : IPluginCoordinator
 
                 // Validate plugin results
                 var validationResult = plugin.ValidateDiscoveredServices(
-                    discoveredServices, 
-                    result.AllDiscoveredServices, 
+                    discoveredServices,
+                    result.AllDiscoveredServices,
                     options);
-                
+
                 pluginResult.ValidationResult = validationResult;
 
                 // If validation passed, add services to the global result
@@ -131,10 +137,11 @@ public class PluginCoordinator : IPluginCoordinator
                 {
                     result.AllDiscoveredServices.AddRange(discoveredServices);
                     pluginResult.IsSuccessful = true;
-                    
+
                     if (options.EnableLogging)
                     {
-                        Console.WriteLine($"  Plugin {plugin.Name} discovered {discoveredServices.Count} services successfully");
+                        _logger.LogInformation("Plugin {PluginName} discovered {Count} services successfully",
+                            plugin.Name, discoveredServices.Count);
                     }
                 }
                 else
@@ -142,16 +149,17 @@ public class PluginCoordinator : IPluginCoordinator
                     result.HasErrors = true;
                     if (options.EnableLogging)
                     {
-                        Console.WriteLine($"  Plugin {plugin.Name} validation failed: {string.Join("; ", validationResult.Errors)}");
+                        _logger.LogWarning("Plugin {PluginName} validation failed: {Errors}",
+                            plugin.Name, string.Join("; ", validationResult.Errors));
                     }
                 }
 
                 // Record plugin performance metrics
                 pluginStopwatch.Stop();
                 _metricsCollector.RecordPluginExecution(
-                    plugin.Name, 
-                    pluginStopwatch.Elapsed, 
-                    discoveredServices.Count, 
+                    plugin.Name,
+                    pluginStopwatch.Elapsed,
+                    discoveredServices.Count,
                     validationResult);
 
             }
@@ -163,16 +171,13 @@ public class PluginCoordinator : IPluginCoordinator
                 pluginResult.ValidationResult = PluginValidationResult.Failure($"Plugin execution failed: {ex.Message}");
                 result.HasErrors = true;
 
-                if (options.EnableLogging)
-                {
-                    Console.WriteLine($"  ERROR: Plugin {plugin.Name} threw exception: {ex.Message}");
-                }
+                _logger.LogError(ex, "Plugin {PluginName} threw exception during execution", plugin.Name);
 
                 // Still record metrics for failed executions
                 _metricsCollector.RecordPluginExecution(
-                    plugin.Name, 
-                    pluginStopwatch.Elapsed, 
-                    0, 
+                    plugin.Name,
+                    pluginStopwatch.Elapsed,
+                    0,
                     pluginResult.ValidationResult);
             }
 
@@ -195,8 +200,8 @@ public class PluginCoordinator : IPluginCoordinator
 
         if (options.EnableLogging)
         {
-            Console.WriteLine($"Plugin coordination completed in {executionStopwatch.ElapsedMilliseconds}ms. " +
-                            $"Total services discovered: {result.AllDiscoveredServices.Count}");
+            _logger.LogInformation("Plugin coordination completed in {ElapsedMs}ms. Total services discovered: {Count}",
+                executionStopwatch.ElapsedMilliseconds, result.AllDiscoveredServices.Count);
         }
 
         return result;

@@ -1,10 +1,15 @@
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using FS.AutoServiceDiscovery.Extensions.Caching;
 using FS.AutoServiceDiscovery.Extensions.Configuration;
+using FS.AutoServiceDiscovery.Extensions.Diagnostics;
 using FS.AutoServiceDiscovery.Extensions.Validation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace FS.AutoServiceDiscovery.Extensions.Performance;
 
@@ -14,20 +19,13 @@ namespace FS.AutoServiceDiscovery.Extensions.Performance;
 /// </summary>
 public static class PerformanceServiceCollectionExtensions
 {
-    // Singleton cache instance shared across all service collection operations
-    // This ensures cache benefits persist across multiple registrations in the same application
     private static readonly Lazy<IAssemblyScanCache> DefaultCache =
         new(() => new MemoryAssemblyScanCache(), LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>
     /// Adds auto services with performance optimizations enabled.
-    /// This method implements caching, parallel scanning, and other performance enhancements
-    /// that can significantly reduce startup time in large applications.
     /// </summary>
-    /// <param name="services">The service collection to add services to</param>
-    /// <param name="configureOptions">Optional configuration for the discovery process</param>
-    /// <param name="assemblies">Assemblies to scan for services</param>
-    /// <returns>The service collection for method chaining</returns>
+    [RequiresUnreferencedCode("Auto service discovery uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAutoServicesWithPerformanceOptimizations(
         this IServiceCollection services,
         Action<AutoServiceOptions>? configureOptions = null,
@@ -36,7 +34,6 @@ public static class PerformanceServiceCollectionExtensions
         var options = new AutoServiceOptions();
         configureOptions?.Invoke(options);
 
-        // Use default cache if none provided
         var cache = DefaultCache.Value;
         var scanner = new OptimizedTypeScanner();
 
@@ -45,8 +42,8 @@ public static class PerformanceServiceCollectionExtensions
 
     /// <summary>
     /// Adds auto services with custom cache and scanner implementations.
-    /// This overload provides maximum flexibility for advanced scenarios.
     /// </summary>
+    [RequiresUnreferencedCode("Auto service discovery uses reflection to scan assemblies and types.")]
     public static IServiceCollection AddAutoServicesWithCustomOptimizations(
         this IServiceCollection services,
         IAssemblyScanCache cache,
@@ -62,8 +59,8 @@ public static class PerformanceServiceCollectionExtensions
 
     /// <summary>
     /// Core optimized service registration implementation.
-    /// This method orchestrates all optimization strategies for maximum performance.
     /// </summary>
+    [RequiresUnreferencedCode("Auto service discovery uses reflection to scan assemblies and types.")]
     private static IServiceCollection AddAutoServicesOptimized(
         IServiceCollection services,
         AutoServiceOptions options,
@@ -71,75 +68,76 @@ public static class PerformanceServiceCollectionExtensions
         OptimizedTypeScanner scanner,
         Assembly[] assemblies)
     {
-        // Default to calling assembly if none specified
+        using var activity = AutoServiceDiscoveryMetrics.ActivitySource.StartActivity("OptimizedServiceDiscovery");
+        var stopwatch = Stopwatch.StartNew();
+
+        var logger = ResolveLogger(services);
+
         if (assemblies.Length == 0)
         {
             assemblies = [Assembly.GetCallingAssembly()];
         }
 
-        var allServiceRegistrations = new List<ServiceRegistrationInfo>();
-        var cacheStats = cache.GetStatistics();
-        var initialCacheHits = cacheStats.CacheHits;
+        activity?.SetTag("assembly.count", assemblies.Length);
 
-        if (options.EnableLogging)
-        {
-            Console.WriteLine($"Starting optimized service discovery for {assemblies.Length} assemblies...");
-            Console.WriteLine($"Cache stats - Hits: {cacheStats.CacheHits}, Misses: {cacheStats.CacheMisses}, Hit Ratio: {cacheStats.HitRatio:F1}%");
-        }
+        var allServiceRegistrations = new List<ServiceRegistrationInfo>(capacity: 128);
+
+        logger.LogDebug("Starting optimized service discovery for {AssemblyCount} assemblies.", assemblies.Length);
 
         foreach (var assembly in assemblies)
         {
+            AutoServiceDiscoveryMetrics.AssembliesScanned.Add(1);
+
             // Try to get results from cache first
             if (cache.TryGetCachedResults(assembly, out var cachedResults) && cachedResults != null)
             {
-                if (options.EnableLogging)
-                {
-                    Console.WriteLine($"Using cached results for assembly: {assembly.GetName().Name} ({cachedResults.Count()} services)");
-                }
+                AutoServiceDiscoveryMetrics.CacheHits.Add(1);
+                var cachedList = cachedResults as IList<ServiceRegistrationInfo> ?? cachedResults.ToList();
 
-                allServiceRegistrations.AddRange(cachedResults); // Null check eklendi
+                logger.LogDebug("Using cached results for assembly: {AssemblyName} ({Count} services)",
+                    assembly.GetName().Name, cachedList.Count);
+
+                allServiceRegistrations.AddRange(cachedList);
                 continue;
             }
 
-            // Cache miss - scan the assembly
-            if (options.EnableLogging)
-            {
-                Console.WriteLine($"Scanning assembly: {assembly.GetName().Name}");
-            }
+            AutoServiceDiscoveryMetrics.CacheMisses.Add(1);
 
-            var startTime = DateTime.UtcNow;
+            logger.LogDebug("Scanning assembly: {AssemblyName}", assembly.GetName().Name);
+
+            var assemblySw = Stopwatch.StartNew();
             var assemblyResults = scanner.ScanAssemblies(new[] { assembly }).ToList();
-            var scanDuration = DateTime.UtcNow - startTime;
+            assemblySw.Stop();
 
-            if (options.EnableLogging)
-            {
-                Console.WriteLine($"Scanned {assembly.GetName().Name} in {scanDuration.TotalMilliseconds:F1}ms, found {assemblyResults.Count} services");
-            }
+            AutoServiceDiscoveryMetrics.AssemblyScanDuration.Record(assemblySw.Elapsed.TotalMilliseconds,
+                new KeyValuePair<string, object?>("assembly", assembly.GetName().Name ?? "unknown"));
 
-            // Cache the results for future use
+            logger.LogDebug("Scanned {AssemblyName} in {Duration:F1}ms, found {Count} services",
+                assembly.GetName().Name, assemblySw.Elapsed.TotalMilliseconds, assemblyResults.Count);
+
             cache.CacheResults(assembly, assemblyResults);
             allServiceRegistrations.AddRange(assemblyResults);
         }
 
-        // Apply filtering based on options (profile, conditional, etc.)
-        var filteredServices = ApplyFiltering(allServiceRegistrations, options);
+        // Apply filtering based on options
+        var filteredServices = ApplyFiltering(allServiceRegistrations, options).ToList();
 
         // Register services in order
-        RegisterServicesOptimized(services, filteredServices, options);
+        RegisterServicesOptimized(services, filteredServices, options, logger);
 
-        // Log final statistics
-        if (!options.EnableLogging) 
-            return services;
-        var finalStats = cache.GetStatistics();
-        var newCacheHits = finalStats.CacheHits - initialCacheHits;
-        Console.WriteLine($"Service discovery completed. Cache performance - New hits: {newCacheHits}, Total services registered: {filteredServices.Count()}");
+        stopwatch.Stop();
+        AutoServiceDiscoveryMetrics.DiscoveryDuration.Record(stopwatch.Elapsed.TotalMilliseconds);
+        activity?.SetTag("services.registered", filteredServices.Count);
+
+        logger.LogInformation(
+            "Optimized service discovery completed in {Duration:F1}ms. Registered {Count} services from {AssemblyCount} assemblies.",
+            stopwatch.Elapsed.TotalMilliseconds, filteredServices.Count, assemblies.Length);
 
         return services;
     }
 
     /// <summary>
     /// Applies filtering logic based on configuration options.
-    /// This method consolidates all filtering logic in one place for better performance.
     /// </summary>
     private static IEnumerable<ServiceRegistrationInfo> ApplyFiltering(
         IEnumerable<ServiceRegistrationInfo> services,
@@ -147,22 +145,24 @@ public static class PerformanceServiceCollectionExtensions
     {
         return services.Where(service =>
         {
-            // Profile filtering
             if (!ShouldRegisterForProfile(service, options.Profile))
+            {
+                AutoServiceDiscoveryMetrics.ServicesSkipped.Add(1,
+                    new KeyValuePair<string, object?>("reason", "profile_mismatch"));
                 return false;
+            }
 
-            // Test environment filtering
             if (options.IsTestEnvironment && service.IgnoreInTests)
+            {
+                AutoServiceDiscoveryMetrics.ServicesSkipped.Add(1,
+                    new KeyValuePair<string, object?>("reason", "test_excluded"));
                 return false;
+            }
 
-            // Conditional filtering
             return ShouldRegisterConditional(service, options.Configuration);
         });
     }
 
-    /// <summary>
-    /// Profile filtering logic moved from main extension class for better performance.
-    /// </summary>
     private static bool ShouldRegisterForProfile(ServiceRegistrationInfo serviceInfo, string? profile)
     {
         if (string.IsNullOrEmpty(profile) || string.IsNullOrEmpty(serviceInfo.Profile))
@@ -171,15 +171,11 @@ public static class PerformanceServiceCollectionExtensions
         return string.Equals(serviceInfo.Profile, profile, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// Conditional filtering logic for performance optimization.
-    /// </summary>
     private static bool ShouldRegisterConditional(ServiceRegistrationInfo serviceInfo, IConfiguration? configuration)
     {
         if (configuration == null || serviceInfo.ConditionalAttributes.Length == 0)
             return true;
 
-        // Tüm conditional'lar true olmalı (AND logic)
         foreach (var conditional in serviceInfo.ConditionalAttributes)
         {
             var configValue = configuration[conditional.ConfigurationKey ?? string.Empty];
@@ -191,81 +187,76 @@ public static class PerformanceServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Optimized service registration with support for keyed services, TryAdd pattern,
-    /// and scope validation.
+    /// Optimized service registration with metrics, ILogger, keyed services, TryAdd, and scope validation.
     /// </summary>
     private static void RegisterServicesOptimized(
         IServiceCollection services,
-        IEnumerable<ServiceRegistrationInfo> serviceInfos,
-        AutoServiceOptions options)
+        List<ServiceRegistrationInfo> serviceInfos,
+        AutoServiceOptions options,
+        ILogger logger)
     {
-        // Group by lifetime for more efficient registration
-        var servicesByLifetime = serviceInfos
-            .GroupBy(s => s.Lifetime)
-            .ToList();
+        var orderedServices = serviceInfos.OrderBy(s => s.Order);
 
-        foreach (var lifetimeGroup in servicesByLifetime)
+        foreach (var serviceInfo in orderedServices)
         {
-            var servicesInGroup = lifetimeGroup.OrderBy(s => s.Order).ToList();
+            var useTryAdd = serviceInfo.UseTryAdd || options.UseTryAddByDefault;
 
-            if (options.EnableLogging)
+            ServiceDescriptor descriptor;
+
+            if (serviceInfo.ServiceKey != null)
             {
-                Console.WriteLine($"Registering {servicesInGroup.Count} {lifetimeGroup.Key} services...");
+                descriptor = new ServiceDescriptor(
+                    serviceInfo.ServiceType,
+                    serviceInfo.ServiceKey,
+                    serviceInfo.ImplementationType,
+                    serviceInfo.Lifetime);
+                AutoServiceDiscoveryMetrics.KeyedRegistrations.Add(1);
+            }
+            else
+            {
+                descriptor = new ServiceDescriptor(
+                    serviceInfo.ServiceType,
+                    serviceInfo.ImplementationType,
+                    serviceInfo.Lifetime);
             }
 
-            foreach (var serviceInfo in servicesInGroup)
+            if (useTryAdd)
             {
-                // Determine UseTryAdd: attribute-level or global default
-                var useTryAdd = serviceInfo.UseTryAdd || options.UseTryAddByDefault;
-
-                ServiceDescriptor descriptor;
-
-                if (serviceInfo.ServiceKey != null)
+                var countBefore = services.Count;
+                services.TryAdd(descriptor);
+                if (services.Count == countBefore)
                 {
-                    descriptor = new ServiceDescriptor(
-                        serviceInfo.ServiceType,
-                        serviceInfo.ServiceKey,
-                        serviceInfo.ImplementationType,
-                        serviceInfo.Lifetime);
-                }
-                else
-                {
-                    descriptor = new ServiceDescriptor(
-                        serviceInfo.ServiceType,
-                        serviceInfo.ImplementationType,
-                        serviceInfo.Lifetime);
-                }
-
-                if (useTryAdd)
-                {
-                    services.TryAdd(descriptor);
-                }
-                else
-                {
-                    services.Add(descriptor);
-                }
-
-                if (options.EnableLogging)
-                {
-                    var keyInfo = serviceInfo.ServiceKey != null ? $", Key: {serviceInfo.ServiceKey}" : "";
-                    var tryAddInfo = useTryAdd ? ", TryAdd" : "";
-                    Console.WriteLine($"  {serviceInfo.ServiceType.Name} -> {serviceInfo.ImplementationType.Name} (Order: {serviceInfo.Order}{keyInfo}{tryAddInfo})");
+                    AutoServiceDiscoveryMetrics.DuplicatesPrevented.Add(1);
+                    continue;
                 }
             }
+            else
+            {
+                services.Add(descriptor);
+            }
+
+            AutoServiceDiscoveryMetrics.ServicesRegistered.Add(1,
+                new KeyValuePair<string, object?>("lifetime", serviceInfo.Lifetime.ToString()));
+
+            logger.LogDebug("  {ServiceType} -> {ImplementationType} (Order: {Order})",
+                serviceInfo.ServiceType.Name, serviceInfo.ImplementationType.Name, serviceInfo.Order);
         }
 
         // Scope validation
         if (options.EnableScopeValidation)
         {
+            var validationSw = Stopwatch.StartNew();
             var validationResult = ScopeValidator.ValidateScopes(services);
+            validationSw.Stop();
 
-            if (options.EnableLogging)
-            {
-                foreach (var warning in validationResult.Warnings)
-                    Console.WriteLine($"Scope Warning: {warning.Message}");
-                foreach (var violation in validationResult.Violations)
-                    Console.WriteLine($"Scope Violation: {violation.Message}");
-            }
+            AutoServiceDiscoveryMetrics.ScopeValidationDuration.Record(validationSw.Elapsed.TotalMilliseconds);
+            AutoServiceDiscoveryMetrics.ScopeViolations.Add(validationResult.Violations.Count);
+            AutoServiceDiscoveryMetrics.ScopeWarnings.Add(validationResult.Warnings.Count);
+
+            foreach (var warning in validationResult.Warnings)
+                logger.LogWarning("Scope Warning: {Message}", warning.Message);
+            foreach (var violation in validationResult.Violations)
+                logger.LogError("Scope Violation: {Message}", violation.Message);
 
             if (!validationResult.IsValid && options.ThrowOnScopeViolation)
             {
@@ -278,7 +269,6 @@ public static class PerformanceServiceCollectionExtensions
 
     /// <summary>
     /// Gets cache statistics for the default cache instance.
-    /// Useful for monitoring and debugging cache performance.
     /// </summary>
     public static CacheStatistics GetCacheStatistics()
     {
@@ -287,11 +277,21 @@ public static class PerformanceServiceCollectionExtensions
 
     /// <summary>
     /// Clears all caches (assembly cache and type metadata cache).
-    /// Primarily useful for testing scenarios.
     /// </summary>
     public static void ClearAllCaches()
     {
         DefaultCache.Value.ClearCache();
         OptimizedTypeScanner.ClearCache();
+    }
+
+    private static ILogger ResolveLogger(IServiceCollection services)
+    {
+        var loggerFactoryDescriptor = services.LastOrDefault(d => d.ServiceType == typeof(ILoggerFactory));
+        if (loggerFactoryDescriptor?.ImplementationInstance is ILoggerFactory factory)
+        {
+            return factory.CreateLogger("FS.AutoServiceDiscovery");
+        }
+
+        return NullLogger.Instance;
     }
 }

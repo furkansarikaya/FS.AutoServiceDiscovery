@@ -145,10 +145,10 @@ public class MemoryAssemblyScanCache : IAssemblyScanCache
     {
         _cache.Clear();
 
-        // Reset statistics - artık ref kullanmadığımız için basit assignment
-        _totalRequests = 0;
-        _cacheHits = 0;
-        _cacheMisses = 0;
+        // Reset statistics using Interlocked for thread-safety
+        Interlocked.Exchange(ref _totalRequests, 0);
+        Interlocked.Exchange(ref _cacheHits, 0);
+        Interlocked.Exchange(ref _cacheMisses, 0);
     }
     
     /// <summary>

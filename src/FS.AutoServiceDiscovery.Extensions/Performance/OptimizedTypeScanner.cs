@@ -43,7 +43,7 @@ public class OptimizedTypeScanner
         var assemblyList = assemblies.ToList();
         
         // For small numbers of assemblies, parallel processing overhead might not be worth it
-        if (assemblyList.Count <= 2)
+        if (assemblyList.Count <= 5)
         {
             return assemblyList.SelectMany(ScanAssemblySequential);
         }
@@ -188,7 +188,7 @@ public class OptimizedTypeScanner
 
         // Get interfaces
         metadata.Interfaces = type.GetInterfaces()
-            .Where(i => !i.Name.StartsWith("System."))
+            .Where(i => !i.Namespace?.StartsWith("System", StringComparison.Ordinal) == true)
             .ToArray();
 
         return metadata;
