@@ -692,5 +692,7 @@ public class FluentAutoServiceConfigurationBuilder
         target.UseTryAddByDefault = source.UseTryAddByDefault;
         target.EnableScopeValidation = source.EnableScopeValidation;
         target.ThrowOnScopeViolation = source.ThrowOnScopeViolation;
+        target.TypeExcludeFilters = source.TypeExcludeFilters;
+        target.TypeIncludeFilters = source.TypeIncludeFilters;
     }
 }

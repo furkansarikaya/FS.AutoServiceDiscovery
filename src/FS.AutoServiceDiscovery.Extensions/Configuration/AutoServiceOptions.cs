@@ -128,4 +128,18 @@ public class AutoServiceOptions
     /// issues before deployment.
     /// </remarks>
     public bool ThrowOnScopeViolation { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets type exclusion filters applied during discovery.
+    /// Types matching any filter will be excluded from registration.
+    /// Primarily used by the Fluent API.
+    /// </summary>
+    public List<Func<Type, bool>> TypeExcludeFilters { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets type inclusion filters applied during discovery.
+    /// When set, only types matching the filters will be registered.
+    /// Primarily used by the Fluent API.
+    /// </summary>
+    public List<Func<Type, bool>> TypeIncludeFilters { get; set; } = [];
 }

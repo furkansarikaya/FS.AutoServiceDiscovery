@@ -9,12 +9,19 @@ A powerful, convention-based automatic service discovery and registration librar
 
 ## What's New in v10.0.2
 
+### New Features
 - **Keyed Services** (.NET 8+) - Register multiple implementations of the same interface with unique keys
 - **TryAdd Pattern** - Prevent duplicate service registrations in modular applications
 - **Multiple Interface Registration** - Register a single implementation under multiple service types
 - **Open Generics** - Automatic registration for `IRepository<T>` -> `Repository<T>` patterns
 - **Decorator Pattern** - Wrap existing services with cross-cutting concerns (caching, logging, etc.)
 - **Scope Validation** - Detect captive dependency issues at startup
+
+### Production Readiness
+- **Structured Logging** - Full `ILogger` integration (no more `Console.WriteLine`)
+- **OpenTelemetry Metrics** - `System.Diagnostics.Metrics` with counters, histograms, and distributed tracing
+- **Security Hardening** - Assembly path validation, culture-safe parsing, thread-safe operations
+- **Deterministic Builds** - Reproducible builds with symbol packages (snupkg)
 
 ## Quick Start
 
@@ -182,6 +189,34 @@ builder.Services.AddAutoServicesWithPerformanceOptimizations(options =>
 });
 ```
 
+### Observability & Metrics
+
+Built-in OpenTelemetry-compatible metrics via `System.Diagnostics.Metrics`:
+
+```csharp
+// Metrics are emitted automatically. Subscribe with any OpenTelemetry-compatible collector:
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics => metrics.AddMeter("FS.AutoServiceDiscovery"))
+    .WithTracing(tracing => tracing.AddSource("FS.AutoServiceDiscovery"));
+```
+
+**Available Metrics:**
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `autoservice.discovery.duration` | Histogram | Total discovery time (ms) |
+| `autoservice.assembly.scan.duration` | Histogram | Per-assembly scan time (ms) |
+| `autoservice.services.registered` | Counter | Services registered (by lifetime) |
+| `autoservice.services.skipped` | Counter | Services skipped (by reason) |
+| `autoservice.cache.hits` / `.misses` | Counter | Assembly scan cache performance |
+| `autoservice.decorators.applied` | Counter | Decorator registrations |
+| `autoservice.scope.violations` | Counter | Scope validation errors |
+| `autoservice.tryadd.prevented` | Counter | Duplicate registrations prevented |
+| `autoservice.keyed.registrations` | Counter | Keyed service registrations |
+| `autoservice.opengeneric.registrations` | Counter | Open generic registrations |
+
+All logging uses `ILogger` - structured, filterable, and production-safe. No `Console.WriteLine` anywhere.
+
 ## Architecture Overview
 
 ```mermaid
@@ -200,12 +235,16 @@ graph TB
     L[Feature Flags] --> E
     M[Custom Plugins] --> F
     N[Decorator Registry] --> H
+    O[ILogger] -.-> B & C & F & H
+    P[Metrics & Tracing] -.-> B & G & H & I
 
     style A fill:#e1f5fe
     style H fill:#c8e6c9
     style G fill:#fff3e0
     style F fill:#f3e5f5
     style I fill:#ffcdd2
+    style O fill:#fff9c4
+    style P fill:#fff9c4
 ```
 
 The library follows a sophisticated pipeline architecture where each component has a specific responsibility:

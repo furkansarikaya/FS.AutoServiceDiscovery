@@ -126,31 +126,33 @@ Large applications often need fine-grained control over which types are included
 ```csharp
 builder.Services.ConfigureAutoServices()
     .FromCurrentDomain()
-    
+
     // Exclude entire namespaces (broad brush approach)
     .ExcludeNamespaces(
         "MyApp.Tests.*",           // All test classes
         "MyApp.Internal.*",        // Internal utilities
         "MyApp.Legacy",            // Legacy code we're not ready to migrate
         "*.Migrations")            // Database migration classes
-    
+
     // Exclude specific types (surgical approach)
-    .ExcludeTypes(type => 
+    .ExcludeTypes(type =>
         type.Name.EndsWith("Test") ||           // Unit test classes
         type.Name.EndsWith("Migration") ||      // Database migrations
         type.IsAbstract ||                      // Abstract base classes
         type.GetCustomAttribute<ObsoleteAttribute>() != null) // Obsolete classes
-    
+
     // Or take an inclusive approach (whitelist)
     .IncludeOnlyTypes(type =>
         type.Namespace?.StartsWith("MyApp.Services") == true ||
         type.Namespace?.StartsWith("MyApp.Repositories") == true ||
         type.Namespace?.StartsWith("MyApp.Controllers") == true)
-    
+
     .Apply();
 ```
 
 The key insight here is that you can use these filtering methods in combination. For example, you might start with a broad namespace inclusion, then exclude specific problematic types within those namespaces.
+
+**Note (v10.0.2)**: Prior to v10.0.2, `ExcludeTypes()`, `ExcludeNamespaces()`, `IncludeOnlyTypes()`, and `When()` conditions configured via the fluent API were not properly passed through to `AutoServiceOptions` and did not filter types during discovery. This bug has been fixed, and all fluent API filters now correctly apply during the discovery process.
 
 ### Custom Naming Conventions Integration
 

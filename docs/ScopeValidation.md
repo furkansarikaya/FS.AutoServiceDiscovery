@@ -133,9 +133,41 @@ The validator builds a lookup of service type to lifetime from the service colle
 
 The validator uses the constructor with the most parameters (the DI convention for primary constructor selection).
 
+## Observability and Metrics
+
+Scope validation emits OpenTelemetry-compatible metrics via `System.Diagnostics.Metrics`. The following counters are available on the `FS.AutoServiceDiscovery` meter:
+
+- **autoservice.scope.violations**: Incremented for each Singleton-to-Scoped captive dependency detected
+- **autoservice.scope.warnings**: Incremented for each Singleton-to-Transient dependency detected
+
+These metrics can be collected and monitored in your observability pipeline (Prometheus, Application Insights, etc.) to track scope validation issues over time:
+
+```csharp
+// Example: Subscribe to metrics in your application
+var meterListener = new MeterListener();
+meterListener.InstrumentPublished = (instrument, listener) =>
+{
+    if (instrument.Meter.Name == "FS.AutoServiceDiscovery")
+    {
+        listener.EnableMeasurementEvents(instrument);
+    }
+};
+
+meterListener.SetMeasurementEventCallback<long>((instrument, measurement, tags, state) =>
+{
+    if (instrument.Name == "autoservice.scope.violations" && measurement > 0)
+    {
+        Console.WriteLine($"Scope violations detected: {measurement}");
+    }
+});
+
+meterListener.Start();
+```
+
 ## Best Practices
 
 - Enable scope validation during development and in CI/CD pipelines. Disable it in production to avoid the startup cost of constructor reflection.
 - Treat violations as build-breaking errors in CI. Captive dependencies are almost always bugs.
 - Review warnings periodically. A Singleton depending on a Transient may be intentional (e.g., a factory pattern), but it is worth verifying.
-- Combine scope validation with [logging](GettingStarted.md) to get a complete picture of your service registrations and any lifetime issues.
+- Combine scope validation with [logging](GettingStarted.md) and metrics collection to get a complete picture of your service registrations and any lifetime issues.
+- Monitor the `autoservice.scope.violations` and `autoservice.scope.warnings` metrics in production to catch regressions early.

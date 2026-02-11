@@ -310,16 +310,30 @@ builder.Services.AddAutoServices(options =>
 
 ### Configuration Output Example
 
-When `EnableLogging = true`, you'll see output like this during startup:
+When `EnableLogging = true`, the library uses `ILogger` to output structured log messages during startup. Configure logging in your `appsettings.json` or host builder to see discovery details:
+
+```json
+{
+  "Logging": {
+    "LogLevel": {
+      "FS.AutoServiceDiscovery": "Information"
+    }
+  }
+}
+```
+
+You'll see log output like this:
 
 ```
-Starting optimized service discovery for 1 assemblies...
-Scanned MyApp in 15.2ms, found 3 services
-Registered: IUserService -> UserService (Scoped, Order: 0)
-Registered: IEmailService -> EmailService (Transient, Order: 0)
-Registered: ICacheService -> CacheService (Singleton, Order: 1)
-Service discovery completed. Total services registered: 3
+[Information] Starting optimized service discovery for 1 assemblies...
+[Information] Scanned MyApp in 15.2ms, found 3 services
+[Information] Registered: IUserService -> UserService (Scoped, Order: 0)
+[Information] Registered: IEmailService -> EmailService (Transient, Order: 0)
+[Information] Registered: ICacheService -> CacheService (Singleton, Order: 1)
+[Information] Service discovery completed. Total services registered: 3
 ```
+
+The library integrates with `Microsoft.Extensions.Logging`, so all output respects your application's logging configuration and can be directed to any configured logging provider (console, file, Application Insights, etc.).
 
 ## 🧪 Testing Your Setup
 

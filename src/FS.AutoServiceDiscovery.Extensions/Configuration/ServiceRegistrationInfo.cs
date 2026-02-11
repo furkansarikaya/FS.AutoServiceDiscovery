@@ -79,4 +79,16 @@ public class ServiceRegistrationInfo
     /// where multiple modules might register the same service.
     /// </remarks>
     public bool UseTryAdd { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether this registration represents a decorator.
+    /// Decorators are handled separately: they wrap an existing registration
+    /// rather than creating a new independent registration.
+    /// </summary>
+    public bool IsDecorator { get; set; }
+
+    /// <summary>
+    /// Gets or sets the service type being decorated (only applicable when <see cref="IsDecorator"/> is true).
+    /// </summary>
+    public Type? DecoratedServiceType { get; set; }
 }

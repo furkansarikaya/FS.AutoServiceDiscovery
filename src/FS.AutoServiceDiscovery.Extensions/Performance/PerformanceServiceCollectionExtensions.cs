@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
+using FS.AutoServiceDiscovery.Extensions.Attributes;
 using FS.AutoServiceDiscovery.Extensions.Caching;
 using FS.AutoServiceDiscovery.Extensions.Configuration;
 using FS.AutoServiceDiscovery.Extensions.Diagnostics;
@@ -145,6 +146,21 @@ public static class PerformanceServiceCollectionExtensions
     {
         return services.Where(service =>
         {
+            // Apply type exclude/include filters (from Fluent API)
+            if (options.TypeExcludeFilters.Count > 0 && options.TypeExcludeFilters.Any(f => f(service.ImplementationType)))
+            {
+                AutoServiceDiscoveryMetrics.ServicesSkipped.Add(1,
+                    new KeyValuePair<string, object?>("reason", "type_excluded"));
+                return false;
+            }
+
+            if (options.TypeIncludeFilters.Count > 0 && !options.TypeIncludeFilters.Any(f => f(service.ImplementationType)))
+            {
+                AutoServiceDiscoveryMetrics.ServicesSkipped.Add(1,
+                    new KeyValuePair<string, object?>("reason", "type_not_included"));
+                return false;
+            }
+
             if (!ShouldRegisterForProfile(service, options.Profile))
             {
                 AutoServiceDiscoveryMetrics.ServicesSkipped.Add(1,
@@ -159,7 +175,7 @@ public static class PerformanceServiceCollectionExtensions
                 return false;
             }
 
-            return ShouldRegisterConditional(service, options.Configuration);
+            return ShouldRegisterConditional(service, options);
         });
     }
 
@@ -171,19 +187,50 @@ public static class PerformanceServiceCollectionExtensions
         return string.Equals(serviceInfo.Profile, profile, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool ShouldRegisterConditional(ServiceRegistrationInfo serviceInfo, IConfiguration? configuration)
+    private static bool ShouldRegisterConditional(ServiceRegistrationInfo serviceInfo, AutoServiceOptions options)
     {
-        if (configuration == null || serviceInfo.ConditionalAttributes.Length == 0)
+        if (serviceInfo.ConditionalAttributes.Length == 0)
             return true;
+
+        // Create a conditional context for expression-based evaluation
+        IConditionalContext? context = null;
 
         foreach (var conditional in serviceInfo.ConditionalAttributes)
         {
-            var configValue = configuration[conditional.ConfigurationKey ?? string.Empty];
-            if (!string.Equals(configValue, conditional.ExpectedValue, StringComparison.OrdinalIgnoreCase))
-                return false;
+            if (conditional.IsExpressionBased)
+            {
+                // Lazy-create context only when needed for expression-based conditions
+                context ??= CreateConditionalContext(options);
+                try
+                {
+                    if (!conditional.EvaluateCondition(context))
+                        return false;
+                }
+                catch
+                {
+                    return false;
+                }
+            }
+            else
+            {
+                // String-based: use configuration directly
+                if (options.Configuration == null)
+                    return false;
+                var configValue = options.Configuration[conditional.ConfigurationKey ?? string.Empty];
+                if (!string.Equals(configValue, conditional.ExpectedValue, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
         }
 
         return true;
+    }
+
+    private static IConditionalContext CreateConditionalContext(AutoServiceOptions options)
+    {
+        var environmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+                              ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
+                              ?? (options.IsTestEnvironment ? "Testing" : "Production");
+        return new ConditionalContext(options.Configuration, environmentName);
     }
 
     /// <summary>
@@ -195,9 +242,20 @@ public static class PerformanceServiceCollectionExtensions
         AutoServiceOptions options,
         ILogger logger)
     {
-        var orderedServices = serviceInfos.OrderBy(s => s.Order);
+        // Separate decorators from regular services
+        var regularServices = new List<ServiceRegistrationInfo>();
+        var decorators = new List<ServiceRegistrationInfo>();
 
-        foreach (var serviceInfo in orderedServices)
+        foreach (var info in serviceInfos)
+        {
+            if (info.IsDecorator)
+                decorators.Add(info);
+            else
+                regularServices.Add(info);
+        }
+
+        // Register regular services first (ordered by priority)
+        foreach (var serviceInfo in regularServices.OrderBy(s => s.Order))
         {
             var useTryAdd = serviceInfo.UseTryAdd || options.UseTryAddByDefault;
 
@@ -235,11 +293,34 @@ public static class PerformanceServiceCollectionExtensions
                 services.Add(descriptor);
             }
 
+            // Track open generic registrations
+            if (serviceInfo.ImplementationType.IsGenericTypeDefinition)
+                AutoServiceDiscoveryMetrics.OpenGenericRegistrations.Add(1);
+
             AutoServiceDiscoveryMetrics.ServicesRegistered.Add(1,
                 new KeyValuePair<string, object?>("lifetime", serviceInfo.Lifetime.ToString()));
 
             logger.LogDebug("  {ServiceType} -> {ImplementationType} (Order: {Order})",
                 serviceInfo.ServiceType.Name, serviceInfo.ImplementationType.Name, serviceInfo.Order);
+        }
+
+        // Apply decorators after all services are registered (ordered by Order)
+        foreach (var decorator in decorators.OrderBy(d => d.Order))
+        {
+            if (decorator.DecoratedServiceType == null) continue;
+
+            // Validate decorator implements the target interface
+            if (!decorator.DecoratedServiceType.IsAssignableFrom(decorator.ImplementationType))
+            {
+                logger.LogWarning("Decorator '{DecoratorType}' does not implement decorated service type '{ServiceType}'. Skipping.",
+                    decorator.ImplementationType.Name, decorator.DecoratedServiceType.Name);
+                continue;
+            }
+
+            RegisterDecorator(services, decorator.DecoratedServiceType, decorator.ImplementationType, logger);
+            AutoServiceDiscoveryMetrics.DecoratorsApplied.Add(1);
+            logger.LogDebug("Decorated: {ServiceType} with {DecoratorType}",
+                decorator.DecoratedServiceType.Name, decorator.ImplementationType.Name);
         }
 
         // Scope validation
@@ -282,6 +363,37 @@ public static class PerformanceServiceCollectionExtensions
     {
         DefaultCache.Value.ClearCache();
         OptimizedTypeScanner.ClearCache();
+    }
+
+    private static void RegisterDecorator(IServiceCollection services, Type serviceType, Type decoratorType, ILogger logger)
+    {
+        var existingDescriptor = services.LastOrDefault(d => d.ServiceType == serviceType);
+        if (existingDescriptor == null)
+        {
+            logger.LogWarning("Cannot apply decorator '{DecoratorType}': no existing registration for '{ServiceType}'.",
+                decoratorType.Name, serviceType.Name);
+            return;
+        }
+
+        services.Remove(existingDescriptor);
+
+        services.Add(new ServiceDescriptor(
+            serviceType,
+            provider =>
+            {
+                object innerInstance;
+                if (existingDescriptor.ImplementationInstance != null)
+                    innerInstance = existingDescriptor.ImplementationInstance;
+                else if (existingDescriptor.ImplementationFactory != null)
+                    innerInstance = existingDescriptor.ImplementationFactory(provider);
+                else if (existingDescriptor.ImplementationType != null)
+                    innerInstance = ActivatorUtilities.CreateInstance(provider, existingDescriptor.ImplementationType);
+                else
+                    throw new InvalidOperationException($"Cannot create instance for service type '{serviceType.Name}'.");
+
+                return ActivatorUtilities.CreateInstance(provider, decoratorType, innerInstance);
+            },
+            existingDescriptor.Lifetime));
     }
 
     private static ILogger ResolveLogger(IServiceCollection services)

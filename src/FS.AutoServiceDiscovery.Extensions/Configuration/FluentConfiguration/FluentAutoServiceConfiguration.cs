@@ -489,18 +489,10 @@ public class FluentAutoServiceConfiguration : IFluentAutoServiceConfiguration
             Configuration = _configuration,
             EnablePerformanceOptimizations = _performanceOptimizations,
             EnableParallelProcessing = _performanceOptimizations,
-            EnablePerformanceMetrics = _performanceOptimizations
+            EnablePerformanceMetrics = _performanceOptimizations,
+            TypeExcludeFilters = new List<Func<Type, bool>>(_typeFilters),
+            TypeIncludeFilters = new List<Func<Type, bool>>(_includeFilters)
         };
-
-        // Store additional configuration data in custom properties for use by the discovery process
-        Context.SetProperty("TypeFilters", _typeFilters);
-        Context.SetProperty("IncludeFilters", _includeFilters);
-        Context.SetProperty("DefaultLifetime", _defaultLifetime ?? ServiceLifetime.Scoped);
-        Context.SetProperty("NamingConventions", _namingConventions);
-        Context.SetProperty("NamingConventionTypes", _namingConventionTypes);
-        Context.SetProperty("Plugins", _plugins);
-        Context.SetProperty("PluginTypes", _pluginTypes);
-        Context.SetProperty("Conditions", _conditions);
 
         return options;
     }

@@ -146,3 +146,7 @@ Decorated: IUserService with CachingUserService
 - Do not apply `ServiceRegistrationAttribute` to decorator classes. Use only `DecoratorServiceAttribute`. The library treats these as distinct registration paths.
 - Test decorators by injecting a mock of the inner service to verify that delegation and additional behavior work correctly.
 - For open generic services registered with `OpenGenericRegistrationAttribute`, decorator support is limited to closed types. See the [Open Generics](OpenGenerics.md) guide for related considerations.
+
+## Performance Considerations
+
+**Important (v10.0.2)**: Prior to v10.0.2, decorators were completely invisible when using the performance-optimized discovery path (`EnablePerformanceOptimizations = true`). This critical bug has been fixed. Decorators now work correctly in both the standard and performance-optimized discovery paths, ensuring consistent behavior regardless of optimization settings.

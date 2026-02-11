@@ -818,7 +818,28 @@ var cache = new UnboundedCache(); // Will consume unlimited memory
 var cache = new LRUCache(maxEntries: 100, maxMemoryMB: 50);
 ```
 
-## v10.0.2 Performance Impact
+## v10.0.2 Performance Improvements and Impact
+
+### Stopwatch-Based Timing
+All performance measurements now use `Stopwatch` instead of `DateTime.UtcNow` for accurate, high-resolution timing. This provides more reliable performance metrics and eliminates issues with clock adjustments.
+
+### Metrics Integration
+The library now emits OpenTelemetry-compatible metrics through `System.Diagnostics.Metrics`. The `AutoServiceDiscoveryMetrics` class provides:
+
+- **Counters**: `autoservice.services.registered`, `autoservice.services.skipped`, `autoservice.cache.hits`, `autoservice.cache.misses`, `autoservice.decorators.applied`, `autoservice.scope.violations`, `autoservice.tryadd.prevented`, `autoservice.keyed.registrations`, `autoservice.opengeneric.registrations`
+- **Histograms**: `autoservice.discovery.duration`, `autoservice.assembly.scan.duration`, `autoservice.scope.validation.duration`
+
+Subscribe to the `FS.AutoServiceDiscovery` meter to collect these metrics in your observability stack.
+
+### Bug Fixes in Performance Path
+Prior to v10.0.2, several features were non-functional or invisible in the performance-optimized path:
+
+- **Decorators** now work correctly in both standard and optimized discovery paths
+- **Multiple interface registration** (ServiceTypes) now properly registers all interfaces in the optimized path
+- **Expression-based conditionals** now evaluate correctly in the optimized path
+- **Fluent API filters** (ExcludeTypes, ExcludeNamespaces, When conditions) now apply during optimized discovery
+
+These fixes mean you can now use all library features with `EnablePerformanceOptimizations = true` without feature loss.
 
 ### Keyed Services
 Keyed service registration adds minimal overhead. The `ServiceDescriptor` constructor that accepts a service key is used instead of the standard constructor. No additional reflection is required.
@@ -836,8 +857,12 @@ Scope validation runs once after all services are registered. It performs constr
 options.EnableScopeValidation = false; // Disable in performance-critical startup
 ```
 
+Scope validation also emits metrics (`autoservice.scope.violations` and `autoservice.scope.warnings` counters) that can be monitored in your observability pipeline.
+
 ### Decorator Pattern
 Decorators use factory-based registration which has a small per-resolution overhead compared to type-based registration. This is because each resolution involves creating both the inner service and the decorator. For high-throughput services, consider whether the decorator's benefit outweighs this cost.
+
+**Important**: Prior to v10.0.2, decorators were completely invisible in the performance-optimized path. This bug has been fixed, and decorators now work correctly in both standard and optimized discovery modes.
 
 ## Next Steps
 

@@ -26,10 +26,12 @@ public class OptimizedTypeScanner
     {
         public ServiceRegistrationAttribute? RegistrationAttribute { get; set; }
         public OpenGenericRegistrationAttribute? OpenGenericAttribute { get; set; }
+        public DecoratorServiceAttribute? DecoratorAttribute { get; set; }
         public ConditionalServiceAttribute[] ConditionalAttributes { get; set; } = [];
         public Type[] Interfaces { get; set; } = [];
         public bool IsServiceCandidate { get; set; }
         public bool IsOpenGeneric { get; set; }
+        public bool IsDecorator { get; set; }
     }
     
     /// <summary>
@@ -82,11 +84,8 @@ public class OptimizedTypeScanner
 
                 if (!metadata.IsServiceCandidate)
                     continue;
-                var serviceInfo = CreateServiceRegistrationInfo(type, metadata);
-                if (serviceInfo != null)
-                {
-                    results.Add(serviceInfo);
-                }
+                var serviceInfos = CreateServiceRegistrationInfos(type, metadata);
+                results.AddRange(serviceInfos);
             }
             
             return results;
@@ -104,11 +103,8 @@ public class OptimizedTypeScanner
                 var metadata = GetOrCreateTypeMetadata(type);
                 if (!metadata.IsServiceCandidate)
                     continue;
-                var serviceInfo = CreateServiceRegistrationInfo(type, metadata);
-                if (serviceInfo != null)
-                {
-                    validTypes.Add(serviceInfo);
-                }
+                var serviceInfos = CreateServiceRegistrationInfos(type, metadata);
+                validTypes.AddRange(serviceInfos);
             }
             
             return validTypes;
@@ -144,8 +140,9 @@ public class OptimizedTypeScanner
         if (type.IsGenericTypeDefinition)
             return type.IsDefined(typeof(OpenGenericRegistrationAttribute), false);
 
-        // Standard service registration attribute check
-        return type.IsDefined(typeof(ServiceRegistrationAttribute), false);
+        // Standard service registration attribute or decorator attribute check
+        return type.IsDefined(typeof(ServiceRegistrationAttribute), false)
+               || type.IsDefined(typeof(DecoratorServiceAttribute), false);
     }
     
     /// <summary>
@@ -175,9 +172,17 @@ public class OptimizedTypeScanner
         }
         else
         {
-            // Get service registration attribute
-            metadata.RegistrationAttribute = type.GetCustomAttribute<ServiceRegistrationAttribute>();
-            metadata.IsServiceCandidate = metadata.RegistrationAttribute != null;
+            // Check for decorator attribute first
+            metadata.DecoratorAttribute = type.GetCustomAttribute<DecoratorServiceAttribute>();
+            metadata.IsDecorator = metadata.DecoratorAttribute != null;
+
+            if (!metadata.IsDecorator)
+            {
+                // Get service registration attribute
+                metadata.RegistrationAttribute = type.GetCustomAttribute<ServiceRegistrationAttribute>();
+            }
+
+            metadata.IsServiceCandidate = metadata.IsDecorator || metadata.RegistrationAttribute != null;
         }
 
         if (!metadata.IsServiceCandidate)
@@ -196,49 +201,91 @@ public class OptimizedTypeScanner
     
     /// <summary>
     /// Creates service registration information from type metadata.
-    /// Supports both standard and open generic registrations, including keyed services and TryAdd.
+    /// Returns multiple entries for types with ServiceTypes (multiple interface registration)
+    /// and handles decorators and open generics.
     /// </summary>
-    private static ServiceRegistrationInfo? CreateServiceRegistrationInfo(Type implementationType, TypeMetadata metadata)
+    private static List<ServiceRegistrationInfo> CreateServiceRegistrationInfos(Type implementationType, TypeMetadata metadata)
     {
+        var results = new List<ServiceRegistrationInfo>();
+
+        // Handle decorator registration
+        if (metadata.IsDecorator && metadata.DecoratorAttribute != null)
+        {
+            results.Add(new ServiceRegistrationInfo
+            {
+                ServiceType = metadata.DecoratorAttribute.DecoratedServiceType,
+                ImplementationType = implementationType,
+                Order = metadata.DecoratorAttribute.Order,
+                Profile = metadata.DecoratorAttribute.Profile,
+                IsDecorator = true,
+                DecoratedServiceType = metadata.DecoratorAttribute.DecoratedServiceType
+            });
+            return results;
+        }
+
         // Handle open generic registration
         if (metadata.IsOpenGeneric && metadata.OpenGenericAttribute != null)
         {
             var serviceType = DetermineOpenGenericServiceType(implementationType, metadata);
-            if (serviceType == null)
-                return null;
-
-            return new ServiceRegistrationInfo
+            if (serviceType != null)
             {
-                ServiceType = serviceType,
-                ImplementationType = implementationType,
-                Lifetime = metadata.OpenGenericAttribute.Lifetime,
-                Order = metadata.OpenGenericAttribute.Order,
-                Profile = metadata.OpenGenericAttribute.Profile,
-                UseTryAdd = metadata.OpenGenericAttribute.UseTryAdd,
-                ConditionalAttributes = metadata.ConditionalAttributes
-            };
+                results.Add(new ServiceRegistrationInfo
+                {
+                    ServiceType = serviceType,
+                    ImplementationType = implementationType,
+                    Lifetime = metadata.OpenGenericAttribute.Lifetime,
+                    Order = metadata.OpenGenericAttribute.Order,
+                    Profile = metadata.OpenGenericAttribute.Profile,
+                    UseTryAdd = metadata.OpenGenericAttribute.UseTryAdd,
+                    ConditionalAttributes = metadata.ConditionalAttributes
+                });
+            }
+            return results;
         }
 
         // Handle standard registration
         if (metadata.RegistrationAttribute == null)
-            return null;
+            return results;
 
-        var svcType = DetermineServiceType(implementationType, metadata);
-        if (svcType == null)
-            return null;
-
-        return new ServiceRegistrationInfo
+        // Multiple interface registration
+        if (metadata.RegistrationAttribute.ServiceTypes is { Length: > 0 })
         {
-            ServiceType = svcType,
-            ImplementationType = implementationType,
-            Lifetime = metadata.RegistrationAttribute.Lifetime,
-            Order = metadata.RegistrationAttribute.Order,
-            Profile = metadata.RegistrationAttribute.Profile,
-            IgnoreInTests = metadata.RegistrationAttribute.IgnoreInTests,
-            ConditionalAttributes = metadata.ConditionalAttributes,
-            ServiceKey = metadata.RegistrationAttribute.ServiceKey,
-            UseTryAdd = metadata.RegistrationAttribute.UseTryAdd
-        };
+            foreach (var svcType in metadata.RegistrationAttribute.ServiceTypes)
+            {
+                results.Add(new ServiceRegistrationInfo
+                {
+                    ServiceType = svcType,
+                    ImplementationType = implementationType,
+                    Lifetime = metadata.RegistrationAttribute.Lifetime,
+                    Order = metadata.RegistrationAttribute.Order,
+                    Profile = metadata.RegistrationAttribute.Profile,
+                    IgnoreInTests = metadata.RegistrationAttribute.IgnoreInTests,
+                    ConditionalAttributes = metadata.ConditionalAttributes,
+                    ServiceKey = metadata.RegistrationAttribute.ServiceKey,
+                    UseTryAdd = metadata.RegistrationAttribute.UseTryAdd
+                });
+            }
+            return results;
+        }
+
+        // Single service type
+        var determinedType = DetermineServiceType(implementationType, metadata);
+        if (determinedType != null)
+        {
+            results.Add(new ServiceRegistrationInfo
+            {
+                ServiceType = determinedType,
+                ImplementationType = implementationType,
+                Lifetime = metadata.RegistrationAttribute.Lifetime,
+                Order = metadata.RegistrationAttribute.Order,
+                Profile = metadata.RegistrationAttribute.Profile,
+                IgnoreInTests = metadata.RegistrationAttribute.IgnoreInTests,
+                ConditionalAttributes = metadata.ConditionalAttributes,
+                ServiceKey = metadata.RegistrationAttribute.ServiceKey,
+                UseTryAdd = metadata.RegistrationAttribute.UseTryAdd
+            });
+        }
+        return results;
     }
     
     /// <summary>
@@ -254,7 +301,7 @@ public class OptimizedTypeScanner
         
         // Convention: I{ClassName} interface'ini ara
         var interfaceName = $"I{implementationType.Name}";
-        var conventionInterface = metadata.Interfaces.FirstOrDefault(i => i.Name == interfaceName);
+        var conventionInterface = metadata.Interfaces.FirstOrDefault(i => string.Equals(i.Name, interfaceName, StringComparison.Ordinal));
         
         if (conventionInterface != null)
             return conventionInterface;
@@ -291,7 +338,7 @@ public class OptimizedTypeScanner
                 var iName = i.Name;
                 var iBacktick = iName.IndexOf('`');
                 if (iBacktick > 0) iName = iName[..iBacktick];
-                return iName == interfaceName;
+                return string.Equals(iName, interfaceName, StringComparison.Ordinal);
             });
 
         if (serviceInterface != null)

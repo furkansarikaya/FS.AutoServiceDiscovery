@@ -4,6 +4,118 @@ When things don't work as expected with auto service discovery, it can feel like
 
 Think of this guide as your diagnostic toolkit. Just like a mechanic uses different tools to diagnose car problems, we'll use different techniques to understand what's happening (or not happening) in your service discovery process.
 
+## 🔬 Observability and Diagnostics
+
+FS.AutoServiceDiscovery v10.0.2+ integrates deeply with `Microsoft.Extensions.Logging` and `System.Diagnostics.Metrics` to provide comprehensive observability into the service discovery process.
+
+### ILogger Integration
+
+All console output has been replaced with structured logging through `ILogger`. Configure logging to see detailed discovery information:
+
+```csharp
+// appsettings.json
+{
+  "Logging": {
+    "LogLevel": {
+      "FS.AutoServiceDiscovery": "Information", // Or "Debug" for verbose output
+      "Default": "Warning"
+    }
+  }
+}
+```
+
+Enable logging in `AddAutoServices`:
+
+```csharp
+builder.Services.AddAutoServices(options =>
+{
+    options.EnableLogging = true; // Enables ILogger output
+    options.Configuration = builder.Configuration;
+});
+```
+
+Log output respects your application's logging configuration and works with any logging provider (console, file, Application Insights, Seq, etc.).
+
+### Metrics and OpenTelemetry
+
+Subscribe to metrics on the `FS.AutoServiceDiscovery` meter to monitor service discovery in production:
+
+**Available Counters:**
+- `autoservice.services.registered` - Total services registered
+- `autoservice.services.skipped` - Services skipped due to conditions
+- `autoservice.cache.hits` / `autoservice.cache.misses` - Assembly cache performance
+- `autoservice.decorators.applied` - Decorators applied
+- `autoservice.scope.violations` / `autoservice.scope.warnings` - Scope validation issues
+- `autoservice.tryadd.prevented` - TryAdd prevented duplicate registrations
+- `autoservice.keyed.registrations` - Keyed services registered
+- `autoservice.opengeneric.registrations` - Open generic registrations
+
+**Available Histograms:**
+- `autoservice.discovery.duration` - Total discovery time
+- `autoservice.assembly.scan.duration` - Per-assembly scan time
+- `autoservice.scope.validation.duration` - Scope validation time
+
+**Example: Subscribe to Metrics**
+
+```csharp
+using System.Diagnostics.Metrics;
+
+var meterListener = new MeterListener();
+meterListener.InstrumentPublished = (instrument, listener) =>
+{
+    if (instrument.Meter.Name == "FS.AutoServiceDiscovery")
+    {
+        listener.EnableMeasurementEvents(instrument);
+    }
+};
+
+meterListener.SetMeasurementEventCallback<long>((instrument, measurement, tags, state) =>
+{
+    Console.WriteLine($"{instrument.Name}: {measurement}");
+});
+
+meterListener.SetMeasurementEventCallback<double>((instrument, measurement, tags, state) =>
+{
+    Console.WriteLine($"{instrument.Name}: {measurement}ms");
+});
+
+meterListener.Start();
+```
+
+**Example: OpenTelemetry Integration**
+
+```csharp
+builder.Services.AddOpenTelemetry()
+    .WithMetrics(metrics => metrics
+        .AddMeter("FS.AutoServiceDiscovery")
+        .AddPrometheusExporter());
+```
+
+### Debugging Service Discovery Issues
+
+When troubleshooting, combine logging and metrics:
+
+```csharp
+builder.Services.AddAutoServices(options =>
+{
+    options.EnableLogging = true; // ILogger output for discovery details
+    options.EnablePerformanceMetrics = true; // Emit metrics
+    options.Configuration = builder.Configuration;
+});
+```
+
+Check logs for:
+- Which assemblies are scanned
+- Which services are registered (interface → implementation mappings)
+- Which services are skipped (and why)
+- Decorator application order
+- Scope validation violations
+
+Check metrics for:
+- Discovery performance (duration histograms)
+- Cache effectiveness (hit/miss ratios)
+- Scope validation issues over time
+
 ## 🔧 Quick Diagnostic Checklist
 
 Before diving into specific problems, run through this quick checklist to catch the most common issues:
@@ -731,6 +843,28 @@ If you've worked through this guide and still have issues:
 The auto service discovery system is designed to be transparent and debuggable. With the right diagnostic approach, most issues can be identified and resolved systematically. Remember that the `EnableLogging = true` option is your best friend for understanding what the system is actually doing during discovery.
 
 ## v10.0.2 Feature Troubleshooting
+
+### Critical Bug Fixes in v10.0.2
+
+If you experienced issues with features not working correctly in earlier versions, v10.0.2 includes fixes for several critical bugs:
+
+**Decorators Not Working in Performance Mode**
+- **Problem**: Decorators were completely invisible when `EnablePerformanceOptimizations = true`
+- **Fix**: Decorators now work correctly in both standard and optimized paths
+
+**Multiple Interface Registration Not Working**
+- **Problem**: `ServiceTypes = new[] { typeof(IFoo), typeof(IBar) }` only registered the first interface in performance mode
+- **Fix**: All specified interfaces are now registered correctly
+
+**Expression-Based Conditionals Not Evaluating**
+- **Problem**: `When(ctx => ctx.Environment.IsProduction())` and similar expressions were ignored in performance mode
+- **Fix**: Expression-based conditions now evaluate correctly in all paths
+
+**Fluent API Filters Not Applying**
+- **Problem**: `ExcludeTypes()`, `ExcludeNamespaces()`, `IncludeOnlyTypes()`, and `When()` configured via fluent API were not passed to AutoServiceOptions
+- **Fix**: All fluent API filters now properly apply during discovery
+
+If you disabled performance optimizations or avoided certain features due to these bugs, you can now safely enable them.
 
 ### Keyed Services Not Resolving
 

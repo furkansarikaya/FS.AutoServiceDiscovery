@@ -99,7 +99,9 @@ public static class ServiceCollectionExtensions
                 types = ex.Types.Where(t => t != null).Cast<Type>().ToArray();
             }
 
-            var candidateTypes = types.Where(t => t.IsClass && !t.IsAbstract);
+            var candidateTypes = types.Where(t => t.IsClass && !t.IsAbstract)
+                .Where(t => !options.TypeExcludeFilters.Any(f => f(t)))
+                .Where(t => options.TypeIncludeFilters.Count == 0 || options.TypeIncludeFilters.Any(f => f(t)));
 
             foreach (var implementationType in candidateTypes)
             {
@@ -315,6 +317,9 @@ public static class ServiceCollectionExtensions
         {
             services.Add(descriptor);
         }
+
+        if (serviceInfo.ImplementationType.IsGenericTypeDefinition)
+            AutoServiceDiscoveryMetrics.OpenGenericRegistrations.Add(1);
 
         AutoServiceDiscoveryMetrics.ServicesRegistered.Add(1,
             new KeyValuePair<string, object?>("lifetime", serviceInfo.Lifetime.ToString()));
